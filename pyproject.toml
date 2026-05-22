@@ -2,4 +2,33 @@
 name = "dkg"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencis = []
+dependencies = [
+    "numpy",
+    "scipy",
+    "polars",
+    "pyarrow",
+    "joblib",
+    "networkx",
+    "pydantic",
+    "diptest>=0.11.0",
+    "statsmodels",
+    "python-louvain>=0.16",
+    "pyreadr>=0.5.6",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+]
+
+[project.scripts]
+dkg = "dkg.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dkg"]

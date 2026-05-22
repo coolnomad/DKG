@@ -1,0 +1,104 @@
+# DKG Discovery Platform Session Log
+**Date:** 2026-05-20
+**Project:** Distributional Knowledge Graph (DKG) — `distributional_knowledge_graph/`
+**Goal:** Design a discovery platform for DepMap data using the existing DKG pipeline, given hardware constraints (4 CPUs, 32 threads, no batch compute).
+
+---
+
+## User
+
+> I want to use the existing code to create a discovery platform for DepMap data. My hardware is limited to 4 CPUs and 32 threads and I don't have batch compute. So I'll need to strategically prioritize which relationships to interrogate.
+
+---
+
+## Clarifying Questions (Claude)
+
+**1. What's the discovery question?**
+Are you looking for predictors of a specific set of dependency targets (e.g., "what predicts sensitivity to gene X?"), or are you doing broader gene-gene co-dependency mapping? That determines whether this is xy-mode (focused) or xx-mode (exhaustive).
+
+**2. What's the target gene set size?**
+The session log mentions up to 12K dependency columns. Are all 12K targets interesting, or do you have a prioritized list — e.g., top cancer targets, specific pathways, or a specific gene you're investigating now?
+
+**3. What's the time budget?**
+"No batch compute" means one machine, presumably running between sessions. Are you thinking overnight jobs (8–12 hrs), weekend jobs, or something that needs to complete in an hour or two so you can iterate interactively?
+
+**4. What do you already have computed?**
+Looking at the git status, there are `output/`, `data/`, and `configs/` directories already. Do you have any Tier 1 results on disk, or are we starting from scratch on the full matrix?
+
+The core tension: **Tier 1 on 240M pairs is probably fine vectorized, but Tier 2 on even 1% of those pairs (2.4M) is likely intractable locally.** The strategy will hinge on how aggressively we can filter before Tier 2.
+
+---
+
+## User — Answers
+
+**1. Discovery question:**
+Objectives (for DepMap):
+- Identify a robust predictor of gene dependency (e.g. TP63)
+- Develop a mechanistic hypothesis explaining the relationship
+- Nominate clinical biomarkers — expression is widely considered impractical, so need alternatives
+
+Interpretability is paramount. Robustness must be demonstrated via cross-validation (predictive utility).
+
+**Follow-up on Q1:**
+Expression is a good biomarker in cell lines but unreliable in the clinic. The goal is to identify something easier to measure as a clinical proxy — e.g. phospho-protein (IHC/mass spec from biopsy) or copy number (FISH, low-pass WGS, SNP arrays). So expression is used for mechanism discovery and to find the signal; CNV/mutation are the translation targets.
+
+**2. Data dimensions:**
+- Dependency (Y): 1476 cell lines × 18532 genes
+- Expression (X1): 2700 rows × 19221 columns (primary predictor)
+- Copy number (X2): log2(ploidy + 1) — continuous
+- Mutations (X3/X4): discrete 0/1/2 for hotspot and damaging separately
+- Potentially other continuous matrices
+
+Plan: global effects first, lineage-specific later.
+
+**3. Two time scales:**
+- **Single-target interactive** (e.g. TP63): target minutes or less. Workflow: initial scan → univariate characterization → high-dimensional predictive model → mechanistic case from lower-level primitives. Priority use case.
+- **Whole-universe overnight**: generalize after single-target is working.
+
+**4. What's on disk:**
+- Tier 0 exists for a 277-row paralog dataset — too small for full DepMap (~1480 rows)
+- Full DepMap dataframe is on disk; Tier 0 needs to be rerun
+- Idea: pre-define 5 CV splits at Tier 0 and carry them forward consistently
+- Tier 0 also used to nominate/eliminate columns (low variance, insufficient coverage)
+- **Benchmark:** Tier 2 on 3 targets / 1708 pairs took 46s on this machine (~37 pairs/sec)
+
+---
+
+## Scope Clarification
+
+- High-dimensional modeling, mutation special-casing, and clinical translation are **out of scope** for DKG
+- DKG's role in the broader architecture: **dimensionality reduction / feature selection** feeding a parallel modeling effort
+- CV splits defined at Tier 0 must be **consistent across DKG and the external modeling pipeline** — splits are a first-class output, saved to disk
+- Within DKG: **ground-up distributional approach** — full phase characterization, not just correlation ranking
+
+---
+
+## Revised Single-Target Workflow (Nested CV)
+
+Feature selection must happen **inside each fold on training data only** to prevent leakage into performance estimates. This is CV-correct feature selection (nested CV structure):
+
+1. **Tier 0** (once, reused): marginals + column filters + define 5 splits → saved to disk
+2. User specifies target (e.g. TP63)
+3. **For each fold k = 1..5:**
+   - Training rows = 4 folds (~1181 rows)
+   - Tier 1 on training data only → nominate top-N pairs for this fold
+   - Tier 2 on nominated pairs using training rows only → distributional characterization
+   - Selected features for fold k handed to external modeling pipeline
+   - Model trained on fold k training set → predicts held-out fold
+4. **Full-data run** (all rows): Tier 1 + Tier 2 → for interpretation and mechanistic story (not performance estimation)
+
+**Stratification:** random (simple), revisit for lineage-specific analysis later.
+
+**Stratification:** random (simple), revisit for lineage-specific analysis later.
+
+**Fold-specific feature sets:** acceptable — goal is to evaluate the procedure itself, not a fixed feature set.
+
+**Tier 1 nomination threshold:** union of top 1.5% by p-value across Pearson, Spearman, and quadratic.
+- ~19K columns × 1.5% = ~285 per metric; union with overlap ≈ 400–600 unique pairs per fold
+- P-value basis is preferable to raw r threshold: accounts for N, stable across datasets
+
+**Compute estimate (single target, ~500 pairs/fold):**
+- 5 × Tier 1 (vectorized, p-value ranked): negligible
+- 5 × Tier 2 (~500 pairs/fold at 37 pairs/sec): ~67s
+- 1 full-data Tier 2 run (~500 pairs): ~14s
+- Total: ~80s → within the minutes target

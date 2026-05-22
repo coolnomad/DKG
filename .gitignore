@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Data and outputs
+data/
+output/
+
+# R
+*.rds
+Rplots.pdf
+.Rhistory
+.RData
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

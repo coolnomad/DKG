@@ -38,10 +38,13 @@ def _process_pair(
             if k not in ("predictor", "target"):
                 row[f"p{phase_num}_{k}"] = v
 
-    try:
-        _merge(2, summarize_phase2(x, y, x_col, y_col))
-    except Exception as exc:
-        logger.warning("Phase 2 failed for (%s, %s): %s", x_col, y_col, exc)
+    fast = config.compute_tier == "fast"
+
+    if not fast:
+        try:
+            _merge(2, summarize_phase2(x, y, x_col, y_col))
+        except Exception as exc:
+            logger.warning("Phase 2 failed for (%s, %s): %s", x_col, y_col, exc)
 
     try:
         _merge(3, summarize_phase3(x, y, x_col, y_col, spline_df=config.spline_df))
@@ -71,17 +74,19 @@ def _process_pair(
     except Exception as exc:
         logger.warning("Phase 7 failed for (%s, %s): %s", x_col, y_col, exc)
 
-    try:
-        _merge(8, summarize_phase8(x, y, x_col, y_col))
-    except Exception as exc:
-        logger.warning("Phase 8 failed for (%s, %s): %s", x_col, y_col, exc)
+    if not fast:
+        try:
+            _merge(8, summarize_phase8(x, y, x_col, y_col))
+        except Exception as exc:
+            logger.warning("Phase 8 failed for (%s, %s): %s", x_col, y_col, exc)
 
-    try:
-        _merge(
-            9, summarize_phase9(x, y, x_col, y_col, spline_df=config.spline_df, seed=config.seed)
-        )
-    except Exception as exc:
-        logger.warning("Phase 9 failed for (%s, %s): %s", x_col, y_col, exc)
+        try:
+            _merge(
+                9,
+                summarize_phase9(x, y, x_col, y_col, spline_df=config.spline_df, seed=config.seed),
+            )
+        except Exception as exc:
+            logger.warning("Phase 9 failed for (%s, %s): %s", x_col, y_col, exc)
 
     return row
 

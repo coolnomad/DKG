@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 class RunConfig(BaseModel):
     mode: Literal["xy", "xx", "pair", "target"] = "xy"
+    # fast: phases 3-7 only (skips distance correlation, energy distance, CV)
+    # full: all phases 2-9
+    compute_tier: Literal["fast", "full"] = "full"
     x_matrix_path: str | None = None
     y_matrix_path: str | None = None
     pair_x: str | None = None

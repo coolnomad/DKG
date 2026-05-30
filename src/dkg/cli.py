@@ -123,6 +123,12 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="DIR",
         help="Shared directory for X marginals cache (reused across targets).",
     )
+    parser.add_argument(
+        "--compute-tier",
+        dest="compute_tier",
+        choices=["fast", "full"],
+        help="Computational tier: fast (phases 3-7 only) or full (all phases 2-9). Default: full",
+    )
     return parser
 
 
@@ -170,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["target_top_pct"] = args.target_top_pct
     if args.tier0_cache_dir is not None:
         config_kwargs["tier0_cache_dir"] = args.tier0_cache_dir
+    if args.compute_tier is not None:
+        config_kwargs["compute_tier"] = args.compute_tier
 
     from dkg.config import RunConfig
 

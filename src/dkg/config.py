@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class RunConfig(BaseModel):
-    mode: Literal["xy", "xx", "pair", "target"] = "xy"
+    mode: Literal["xy", "xx", "pair", "target", "survey"] = "xy"
     # fast: phases 3-7 only (skips distance correlation, energy distance, CV)
     # full: all phases 2-9
     compute_tier: Literal["fast", "full"] = "full"
@@ -39,3 +39,7 @@ class RunConfig(BaseModel):
     target_skip_tier0: bool = False
     target_skip_tier2: bool = False
     tier0_cache_dir: str | None = None  # shared cache for X marginals across targets
+    # --- survey mode ---
+    survey_targets: list[str] = []           # explicit Y column list (empty = all)
+    survey_target_list_path: str | None = None  # path to newline-separated target list
+    survey_top_pct: float = 100.0            # 100 = all predictors; lower = nominated only

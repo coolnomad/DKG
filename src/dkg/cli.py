@@ -31,9 +31,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"dkg {_get_version()}")
     parser.add_argument(
         "--mode",
-        choices=["xy", "xx", "pair", "target"],
+        choices=["xy", "xx", "pair", "target", "survey"],
         default="xy",
-        help="Run mode: xy (cross-matrix), xx (within-matrix), pair (single deep-dive), target (single-target nested CV).",
+        help="Run mode: xy (cross-matrix), xx (within-matrix), pair (single deep-dive), target (single-target nested CV), survey (multi-target vectorized screen).",
     )
     parser.add_argument(
         "--x-matrix", dest="x_matrix_path", metavar="PATH", help="Path to X matrix file"
@@ -150,6 +150,19 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Skip Tier 2 deep analysis. Runs vectorized Tier 1 screen on all predictors and writes tier1_target_full.parquet.",
     )
+    parser.add_argument(
+        "--target-list",
+        dest="survey_target_list_path",
+        metavar="PATH",
+        help="Path to newline-separated list of Y column names to screen (survey mode). Omit to screen all Y columns.",
+    )
+    parser.add_argument(
+        "--survey-top-pct",
+        dest="survey_top_pct",
+        type=float,
+        metavar="F",
+        help="Top-N%% of predictors to retain in survey output. Default: 100 (all).",
+    )
     return parser
 
 
@@ -205,6 +218,10 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["target_skip_tier0"] = True
     if args.target_skip_tier2:
         config_kwargs["target_skip_tier2"] = True
+    if args.survey_target_list_path is not None:
+        config_kwargs["survey_target_list_path"] = args.survey_target_list_path
+    if args.survey_top_pct is not None:
+        config_kwargs["survey_top_pct"] = args.survey_top_pct
 
     from dkg.config import RunConfig
 
@@ -226,6 +243,10 @@ def main(argv: list[str] | None = None) -> int:
         from dkg.modes import target
 
         runner = target.run
+    elif config.mode == "survey":
+        from dkg.modes import survey
+
+        runner = survey.run
     else:
         from dkg.modes import pair
 

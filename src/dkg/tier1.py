@@ -82,6 +82,40 @@ def _pearson_pair(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, fl
     return pr, pp, sr, sp, n
 
 
+def _rank_auc_from_order(
+    order: np.ndarray,
+    tail: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rank-based AUROC and PR-AUC using a precomputed sort order. O(N*P), no sorting.
+
+    order: (n, p) int — precomputed ascending argsort indices into y/tail.
+    tail:  (n,) bool — True = left-tail event.
+    Returns auc (p,), pr_auc (p,).
+    """
+    n, p = order.shape
+    n_pos = int(tail.sum())
+    n_neg = n - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return np.full(p, np.nan), np.full(p, np.nan)
+
+    tail_s = tail[order]   # (n, p) bool — indexing only, no sort
+
+    tpr = np.cumsum(tail_s,  axis=0) / n_pos
+    fpr = np.cumsum(~tail_s, axis=0) / n_neg
+    fpr_ext = np.vstack([np.zeros(p), fpr])
+    tpr_ext = np.vstack([np.zeros(p), tpr])
+    auc = np.sum(np.diff(fpr_ext, axis=0) * (tpr_ext[:-1] + tpr_ext[1:]) / 2, axis=0)
+
+    tp = np.cumsum(tail_s, axis=0).astype(np.float64)
+    fp = np.cumsum(~tail_s, axis=0).astype(np.float64)
+    precision = tp / (tp + fp + 1e-8)
+    recall = tp / n_pos
+    recall_ext = np.vstack([np.zeros(p), recall])
+    pr_auc = np.sum(np.diff(recall_ext, axis=0) * precision, axis=0)
+
+    return auc, pr_auc
+
+
 def _rank_auc_block(
     X: np.ndarray,
     tail: np.ndarray,
@@ -409,6 +443,119 @@ def screen_single_target(
             "n_obs":           np.full(len(idx), n, dtype=np.int64),
         }
     )
+
+
+def screen_from_cache(
+    y_vec: np.ndarray,
+    y_name: str,
+    x_cols: list[str],
+    cache: "XCache",  # type: ignore[name-defined]  # noqa: F821
+    top_pct: float = 100.0,
+) -> pl.DataFrame:
+    """Screen one Y target against precomputed X cache. No X recomputation or argsort.
+
+    Uses _rank_auc_from_order (O(N*P) indexing) instead of _rank_auc_block
+    (O(N*P log N) sorting). All other operations are identical to screen_single_target.
+
+    y_vec:   (N,) dependency scores — NaN rows are filtered before computation.
+    y_name:  column name written to the y_col field.
+    x_cols:  list of X column names (length P).
+    cache:   XCache built by dkg.xcache.get_xcache.
+    top_pct: 100.0 returns all predictors; lower values nominate top fraction.
+    """
+    valid = ~np.isnan(y_vec)
+    all_valid = bool(np.all(valid))
+    y_use = y_vec if all_valid else y_vec[valid]
+    n = len(y_use)
+    p = cache.p
+
+    if all_valid:
+        Xc = cache.Xc; Xrc = cache.Xrc; X2c = cache.X2c
+        argsort = cache.argsort
+    else:
+        Xc = cache.Xc[valid]; Xrc = cache.Xrc[valid]; X2c = cache.X2c[valid]
+        # Filter argsort to valid rows: for each column keep entries whose row
+        # index is valid, in sorted order, remapped to local (0-based) indices.
+        valid_in_order = valid[cache.argsort]              # (N, P) bool
+        n_valid = int(valid.sum())
+        # Extract valid entries column-by-column via transpose trick (each
+        # column has exactly n_valid True values when X has no NaN).
+        argsort_global = cache.argsort.T[valid_in_order.T].reshape(p, n_valid).T
+        remap = np.full(cache.n, -1, dtype=np.int32)
+        remap[np.where(valid)[0]] = np.arange(n_valid, dtype=np.int32)
+        argsort = remap[argsort_global]
+
+    Y2d  = y_use[:, None]
+    Yc   = Y2d - Y2d.mean()
+    Y_std = float(Y2d.std())
+
+    Yr    = scipy.stats.rankdata(y_use).astype(np.float64)[:, None]
+    Yrc   = Yr - Yr.mean()
+    Yr_std = float(Yr.std())
+
+    Y2    = Y2d ** 2
+    Y2c   = Y2 - Y2.mean()
+    Y2_std = float(Y2.std())
+
+    pr   = _pearson_block(Xc,  cache.X_std,  Yc,  np.array([Y_std]),  n)[:, 0]
+    sr   = _pearson_block(Xrc, cache.Xr_std, Yrc, np.array([Yr_std]), n)[:, 0]
+    qfwd = _pearson_block(X2c, cache.X2_std, Yc,  np.array([Y_std]),  n)[:, 0]
+    qrev = _pearson_block(Xc,  cache.X_std,  Y2c, np.array([Y2_std]), n)[:, 0]
+
+    safe_x_std    = np.where(cache.X_std > 0, cache.X_std, np.nan)
+    ols_slope     = pr * (Y_std / safe_x_std)
+    ols_intercept = float(y_use.mean()) - ols_slope * cache.X_mean
+    ols_r2        = pr ** 2
+
+    tail_q10 = y_use <= float(np.quantile(y_use, 0.10))
+    tail_q20 = y_use <= float(np.quantile(y_use, 0.20))
+    prev_q10 = float(tail_q10.mean())
+    prev_q20 = float(tail_q20.mean())
+    eps = 1e-8
+
+    auc_q10    = np.empty(p); pr_auc_q10 = np.empty(p)
+    auc_q20    = np.empty(p); pr_auc_q20 = np.empty(p)
+    for i0 in range(0, p, CHUNK_AUC):
+        sl = slice(i0, min(i0 + CHUNK_AUC, p))
+        auc_q10[sl],  pr_auc_q10[sl]  = _rank_auc_from_order(argsort[:, sl], tail_q10)
+        auc_q20[sl],  pr_auc_q20[sl]  = _rank_auc_from_order(argsort[:, sl], tail_q20)
+
+    lift_q10 = pr_auc_q10 / (prev_q10 + eps)
+    lift_q20 = pr_auc_q20 / (prev_q20 + eps)
+
+    mask = (
+        _top_pct_mask(np.abs(pr),   top_pct)
+        | _top_pct_mask(np.abs(sr),   top_pct)
+        | _top_pct_mask(np.abs(qfwd), top_pct)
+        | _top_pct_mask(np.abs(qrev), top_pct)
+    )
+    idx = np.where(mask)[0]
+    if len(idx) == 0:
+        return pl.DataFrame({"x_col": pl.Series([], dtype=pl.Utf8),
+                              "y_col": pl.Series([], dtype=pl.Utf8),
+                              "n_obs": pl.Series([], dtype=pl.Int64)})
+
+    pr_s = pr[idx]; sr_s = sr[idx]
+    return pl.DataFrame({
+        "x_col":           [x_cols[i] for i in idx],
+        "y_col":           y_name,
+        "pearson_r":       pr_s,
+        "pearson_p":       _r_to_p(pr_s, n),
+        "spearman_r":      sr_s,
+        "spearman_p":      _r_to_p(sr_s, n),
+        "quadratic_r_fwd": qfwd[idx],
+        "quadratic_r_rev": qrev[idx],
+        "ols_slope":       ols_slope[idx],
+        "ols_intercept":   ols_intercept[idx],
+        "ols_r2":          ols_r2[idx],
+        "rank_auc_q10":    auc_q10[idx],
+        "rank_pr_auc_q10": pr_auc_q10[idx],
+        "rank_lift_q10":   lift_q10[idx],
+        "rank_auc_q20":    auc_q20[idx],
+        "rank_pr_auc_q20": pr_auc_q20[idx],
+        "rank_lift_q20":   lift_q20[idx],
+        "n_obs":           np.full(len(idx), n, dtype=np.int64),
+    })
 
 
 def passes_threshold(row: dict[str, object], config: RunConfig) -> bool:

@@ -12,7 +12,7 @@ from dkg.config import RunConfig
 from dkg.io import align_matrices, load_matrix
 from dkg.phases.phase1 import sweep_phase1
 from dkg.splits import get_train_indices, load_splits, make_splits, save_splits
-from dkg.tier1 import screen_single_target  # used in fold runs
+from dkg.tier1 import screen_single_target
 from dkg.tier2 import run_deep
 
 
@@ -147,13 +147,21 @@ def _run_full(
     out_dir: Path,
     config: RunConfig,
 ) -> None:
-    """Tier 2 on ALL predictors (no Tier 1 filter) — for exploration and interpretation."""
+    """Full-data pass: Tier 1 screen only (--skip-tier2) or Tier 2 on all predictors."""
     n, p = X.shape
-    _status(f"[full] Tier 2 — all {p:,} predictors vs {target_col}  (n={n})")
-    all_pairs = pl.DataFrame(
-        {"x_col": x_cols, "y_col": [target_col] * p}
-    )
     t0 = time.monotonic()
+
+    if config.target_skip_tier2:
+        _status(f"[full] Tier 1 screen — all {p:,} predictors vs {target_col}  (n={n})")
+        result = screen_single_target(X, x_cols, y_vec, top_pct=100.0)
+        result = result.with_columns(pl.lit(target_col).alias("y_col"))
+        out_path = out_dir / "tier1_target_full.parquet"
+        result.write_parquet(str(out_path))
+        _status(f"[full] Tier 1 screen done  {len(result):,} pairs  ({time.monotonic() - t0:.1f}s)")
+        return
+
+    _status(f"[full] Tier 2 — all {p:,} predictors vs {target_col}  (n={n})")
+    all_pairs = pl.DataFrame({"x_col": x_cols, "y_col": [target_col] * p})
     Y_full = y_vec[:, None]
     run_deep(
         all_pairs,

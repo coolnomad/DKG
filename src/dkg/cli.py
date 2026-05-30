@@ -143,6 +143,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Skip Tier 0 marginal profiling (target mode). Use when column filtering is not needed.",
     )
+    parser.add_argument(
+        "--skip-tier2",
+        dest="target_skip_tier2",
+        action="store_true",
+        default=None,
+        help="Skip Tier 2 deep analysis. Runs vectorized Tier 1 screen on all predictors and writes tier1_target_full.parquet.",
+    )
     return parser
 
 
@@ -196,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["target_skip_cv"] = True
     if args.target_skip_tier0:
         config_kwargs["target_skip_tier0"] = True
+    if args.target_skip_tier2:
+        config_kwargs["target_skip_tier2"] = True
 
     from dkg.config import RunConfig
 

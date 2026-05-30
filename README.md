@@ -12,17 +12,17 @@ For a given dependency target (e.g. `TP63`), DKG runs a three-step pipeline:
 
 1. **Tier 0** — Phase 1 marginal profiling of all predictor columns (variance, coverage, distribution shape, bimodality). Cached on disk and reused across targets.
 
-2. **Tier 1** (fold runs only) — Vectorized correlation screen. Nominates the union of the top 1.5% of predictors by |r| across Pearson, Spearman, and quadratic terms. Run independently within each CV fold on training rows only, so feature selection does not leak into performance estimates.
+2. **Tier 1** — Vectorized screen over all predictors. In CV mode, run independently on training rows per fold (leak-free). Outputs per nominated pair: Pearson r, Spearman rho, quadratic r (fwd/rev), OLS slope/intercept/R², rank-based AUROC and PR-AUC at Q10 and Q20 — all in a single matrix pass (~17s for 19K predictors at 1,465 rows).
 
-3. **Tier 2** — Full distributional characterization (Phases 2–9) on nominated pairs:
-   - **Phase 2**: Linear and rank association, distance correlation, robust vs OLS slope ratio
+3. **Tier 2** — Per-pair distributional characterization on nominated pairs. Two computational tiers selectable via `--compute-tier`:
+   - **Phase 2** *(full only)*: distance correlation, Kendall tau, robust (RLM) slope — O(N²). Fast mode retains Pearson, Spearman, OLS slope.
    - **Phase 3**: Conditional mean shape — linear vs spline fit, monotonicity, direction, nonlinearity test
    - **Phase 4**: Conditional variance structure — heteroscedasticity slope, SD ratio across X range
    - **Phase 5**: Tail behavior — left/right tail enrichment in high-X vs low-X groups, Fisher exact tests
    - **Phase 6**: Skewness and asymmetry — does the Y distribution restructure across the X range?
    - **Phase 7**: Regime threshold — piecewise linear model search, slope sign changes, regime median shift
-   - **Phase 8**: Distributional shift — KS test, Wasserstein distance, quantile-by-quantile shift profile
-   - **Phase 9**: Predictive utility — 5-fold CV regression (linear + spline) and tail classification (AUROC, PR-AUC lift at Q10 and Q20)
+   - **Phase 8** *(full only)*: Distributional shift — KS test, Wasserstein distance, energy distance — O(N²)
+   - **Phase 9** *(full only for CV)*: Predictive utility — 5-fold CV regression + tail classification. Fast mode uses rank-based AUROC/PR-AUC (no model fitting).
 
 The pipeline runs at two scales per target:
 - **CV folds** (5×): Tier 1 + Tier 2 on training rows only → CV-correct feature selection for external modeling
@@ -30,15 +30,27 @@ The pipeline runs at two scales per target:
 
 ## Performance
 
-On a 4-CPU / 32-thread machine with 1,465 cell lines and 19,215 expression predictors:
+On a 4-CPU / 32-thread machine with 1,465 cell lines and 19,215 expression predictors (26Q1 release):
+
+**Full tier** (all phases 2–9, with CV):
 
 | Step | Time |
 |------|------|
 | Tier 0 (first run, no cache) | ~57 min |
 | Tier 0 (cached) | ~1s |
-| 5 CV folds (~480 pairs/fold) | ~90s |
-| Full Tier 2 on all 19K predictors | ~10 min |
-| **Total per target (cached)** | **~11 min** |
+| 5 CV folds (~480 pairs/fold) | ~49s |
+| Full Tier 2 on all 19K predictors | ~291s |
+| **Total per target (cached)** | **~349s (~6 min)** |
+
+**Fast tier** (`--compute-tier fast --skip-cv --skip-tier0`):
+
+| Step | Time |
+|------|------|
+| Tier 1 vectorized screen (all metrics) | ~17s |
+| Full Tier 2 on all 19K predictors | ~208s |
+| **Total per target** | **~225s (~3.5 min)** |
+
+At ~225s/target on this hardware, a universe sweep of ~11,700 DepMap dependency targets requires ~61 parallel workers to complete in 12 hours. Estimated cost on cloud spot compute: ~$20–50.
 
 ## Setup
 
@@ -73,6 +85,7 @@ For DepMap `.rds` files, use the included `convert_to_feather.py` script (requir
 
 ## Running a target
 
+**Interactive (single target, full pipeline with CV):**
 ```bash
 uv run dkg --mode target \
   --x-matrix data/XP_26Q1.feather \
@@ -80,6 +93,19 @@ uv run dkg --mode target \
   --target-col "TP63..8626." \
   --tier0-cache-dir output/cache \
   --output-dir output/tp63 \
+  --n-jobs -1
+```
+
+**Exploration / universe sweep (fast tier, no CV, no Tier 0):**
+```bash
+uv run dkg --mode target \
+  --x-matrix data/XP_26Q1.feather \
+  --y-matrix data/CRISPR_26Q1.feather \
+  --target-col "TP63..8626." \
+  --output-dir output/tp63_fast \
+  --compute-tier fast \
+  --skip-cv \
+  --skip-tier0 \
   --n-jobs -1
 ```
 
@@ -101,6 +127,15 @@ uv run dkg --mode target --config-json base_config.json \
   --target-col "TP63..8626." \
   --output-dir output/tp63
 ```
+
+### Computational tier flags
+
+| Flag | Effect |
+|------|--------|
+| `--compute-tier fast` | Skip distance correlation (Ph2), energy distance (Ph8), logistic CV (Ph9). Use rank-based AUROC instead. Phases 3–7 unchanged. |
+| `--compute-tier full` | All phases 2–9 (default). |
+| `--skip-cv` | Skip CV folds entirely; run full-data Tier 2 only. |
+| `--skip-tier0` | Skip marginal profiling. Use when column filtering is not needed (e.g. batch sweeps). |
 
 ## Outputs
 

@@ -102,3 +102,67 @@ Feature selection must happen **inside each fold on training data only** to prev
 - 5 × Tier 2 (~500 pairs/fold at 37 pairs/sec): ~67s
 - 1 full-data Tier 2 run (~500 pairs): ~14s
 - Total: ~80s → within the minutes target
+
+---
+
+## Session 2 — 2026-05-29/30
+
+### Computational tier system
+
+Benchmarking on the full 26Q1 matrices (1,465 cell lines × 19,215 expression predictors) identified three expensive operations:
+
+1. **Phase 2** — distance correlation O(N²), Kendall tau, RLM (iterative robust regression)
+2. **Phase 8** — energy distance O(N²) pairwise outer product
+3. **Phase 9** — 5-fold logistic CV (~500 passes over N per pair)
+
+Implemented `--compute-tier {fast,full}` (default: `full`):
+- **fast**: phases 3–7 only. Phase 2 retains Pearson, Spearman, OLS slope (cheap). Phase 9 uses rank-based AUROC/PR-AUC (x as score, no logistic fitting). Phase 8 skipped.
+- **full**: all phases 2–9 as originally designed.
+
+### Benchmark results (TP63, 26Q1, n=1465, p=19215)
+
+| Config | CV folds | Full run | Total |
+|--------|----------|----------|-------|
+| Full tier | ~49s | ~291s | ~349s |
+| Fast tier | ~29s | ~208s | ~237s |
+| Fast + skip-cv + skip-tier0 | — | ~223s | ~223s |
+
+Speedup on full-data run: **~2.5×** (fast vs full). CV folds contribute ~14% of total time in fast mode.
+
+### Flags added
+
+| Flag | Effect |
+|------|--------|
+| `--compute-tier fast\|full` | Select computational tier |
+| `--skip-cv` | Skip CV folds; full-data run only. For exploration. |
+| `--skip-tier0` | Skip marginal profiling. For batch sweeps where column filtering is not needed. |
+
+### Universe sweep economics
+
+- ~11,745 DepMap dependency targets
+- Fast tier + skip-cv + skip-tier0: **~223s per target**
+- To complete in 12 hours: ~61 parallel workers
+- Estimated cost on cloud spot compute: **~$20–50 per universe sweep**
+- Tier 0 X marginals computed once, shared across all workers via shared storage
+
+### Tier 1 vectorized screen extended
+
+`screen_single_target` now computes the following for all nominated pairs in a single matrix pass (~17s at 1,465 × 19,215):
+
+**Cheap metrics now in Tier 1 (vectorized):**
+- Pearson r + p, Spearman rho + p, quadratic r fwd/rev (already present)
+- OLS slope: `pearson_r × (y_std / x_std)` — O(1) from existing stats
+- OLS intercept, OLS R²
+- Rank AUROC Q10/Q20: vectorized argsort + cumsum across all P columns
+- Rank PR-AUC Q10/Q20, lift Q10/Q20
+
+**Still requires per-pair Tier 2 (batch):**
+- Phases 3–7: spline fits, binned variance/tails/skewness, piecewise OLS threshold search
+- Phase 8: energy distance, Wasserstein
+- Phase 9 full: logistic CV, RMSE/MAE/CV-R²
+
+### Local / batch split architecture
+
+Proposed for universe sweep:
+1. **Local vectorized pass** — Tier 1 extended screen over full X×Y matrix → all linear/rank metrics for all pairs, minutes per target
+2. **Batch** — phases 3–7 on nominated pairs only; workers receive nominated pair lists, not full matrices

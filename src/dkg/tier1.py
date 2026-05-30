@@ -25,6 +25,10 @@ from dkg.config import RunConfig
 # At CHUNK_X=500, n_y=12_000: peak block ≈ 4 * 500 * 12_000 * 8 ≈ 192 MB.
 CHUNK_X = 500
 
+# Columns of X processed per chunk for rank-AUC argsort (memory: n*chunk*8 bytes).
+# At CHUNK_AUC=2000, n=1465: argsort array ≈ 2000 * 1465 * 4 ≈ 11 MB.
+CHUNK_AUC = 2000
+
 
 def _pearson_block(
     Xc: np.ndarray,
@@ -76,6 +80,41 @@ def _pearson_pair(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, fl
     yr = scipy.stats.rankdata(yv, method="average")
     sr, sp = _corr(xr, yr)
     return pr, pp, sr, sp, n
+
+
+def _rank_auc_block(
+    X: np.ndarray,
+    tail: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorized rank-based AUROC and PR-AUC across p columns.
+
+    X: (n, p) float64, no NaNs. tail: (n,) bool — True = left-tail event.
+    Low x = predicted tail (ascending sort = high discrimination score).
+    Returns auc (p,), pr_auc (p,).
+    """
+    n, p = X.shape
+    n_pos = int(tail.sum())
+    n_neg = n - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return np.full(p, np.nan), np.full(p, np.nan)
+
+    order = np.argsort(X, axis=0)  # (n, p) ascending — int64
+    tail_s = tail[order]           # (n, p) bool
+
+    tpr = np.cumsum(tail_s,  axis=0) / n_pos   # (n, p)
+    fpr = np.cumsum(~tail_s, axis=0) / n_neg   # (n, p)
+    fpr_ext = np.vstack([np.zeros(p), fpr])
+    tpr_ext = np.vstack([np.zeros(p), tpr])
+    auc = np.sum(np.diff(fpr_ext, axis=0) * (tpr_ext[:-1] + tpr_ext[1:]) / 2, axis=0)
+
+    tp = np.cumsum(tail_s, axis=0).astype(np.float64)
+    fp = np.cumsum(~tail_s, axis=0).astype(np.float64)
+    precision = tp / (tp + fp + 1e-8)
+    recall = tp / n_pos
+    recall_ext = np.vstack([np.zeros(p), recall])
+    pr_auc = np.sum(np.diff(recall_ext, axis=0) * precision, axis=0)
+
+    return auc, pr_auc
 
 
 def _empty_df() -> pl.DataFrame:
@@ -299,6 +338,34 @@ def screen_single_target(
     qfwd = _pearson_block(X2c, X2_std, Yc, Y_std, n)[:, 0]
     qrev = _pearson_block(Xc, X_std, Y2c, Y2_std, n)[:, 0]
 
+    # OLS slope (x→y), intercept, R² — derived from Pearson and pre-computed stats.
+    y_std = float(Y2d.std())
+    y_mean = float(Y2d.mean())
+    X_mean_vec = X_use.mean(axis=0)                                  # (p,)
+    safe_x_std = np.where(X_std > 0, X_std, np.nan)
+    ols_slope = pr * (y_std / safe_x_std)                            # (p,)
+    ols_intercept = y_mean - ols_slope * X_mean_vec                  # (p,)
+    ols_r2 = pr ** 2                                                  # (p,)
+
+    # Rank-based AUROC / PR-AUC — chunked over X columns for memory efficiency.
+    tail_q10 = y_use <= float(np.quantile(y_use, 0.10))
+    tail_q20 = y_use <= float(np.quantile(y_use, 0.20))
+    prev_q10 = float(tail_q10.mean())
+    prev_q20 = float(tail_q20.mean())
+    eps = 1e-8
+
+    auc_q10    = np.empty(p)
+    pr_auc_q10 = np.empty(p)
+    auc_q20    = np.empty(p)
+    pr_auc_q20 = np.empty(p)
+    for i0 in range(0, p, CHUNK_AUC):
+        sl = slice(i0, min(i0 + CHUNK_AUC, p))
+        auc_q10[sl], pr_auc_q10[sl] = _rank_auc_block(X_use[:, sl], tail_q10)
+        auc_q20[sl], pr_auc_q20[sl] = _rank_auc_block(X_use[:, sl], tail_q20)
+
+    lift_q10 = pr_auc_q10 / (prev_q10 + eps)
+    lift_q20 = pr_auc_q20 / (prev_q20 + eps)
+
     mask = (
         _top_pct_mask(np.abs(pr), top_pct)
         | _top_pct_mask(np.abs(sr), top_pct)
@@ -308,20 +375,38 @@ def screen_single_target(
 
     idx = np.where(mask)[0]
     if len(idx) == 0:
-        return _empty_df()
+        return pl.DataFrame(
+            {k: pl.Series([], dtype=pl.Float64) for k in [
+                "pearson_r", "pearson_p", "spearman_r", "spearman_p",
+                "quadratic_r_fwd", "quadratic_r_rev",
+                "ols_slope", "ols_intercept", "ols_r2",
+                "rank_auc_q10", "rank_pr_auc_q10", "rank_lift_q10",
+                "rank_auc_q20", "rank_pr_auc_q20", "rank_lift_q20",
+            ]}
+            | {"x_col": pl.Series([], dtype=pl.Utf8), "n_obs": pl.Series([], dtype=pl.Int64)}
+        )
 
     pr_s = pr[idx]
     sr_s = sr[idx]
     return pl.DataFrame(
         {
-            "x_col": [x_cols[i] for i in idx],
-            "pearson_r": pr_s,
-            "pearson_p": _r_to_p(pr_s, n),
-            "spearman_r": sr_s,
-            "spearman_p": _r_to_p(sr_s, n),
+            "x_col":           [x_cols[i] for i in idx],
+            "pearson_r":       pr_s,
+            "pearson_p":       _r_to_p(pr_s, n),
+            "spearman_r":      sr_s,
+            "spearman_p":      _r_to_p(sr_s, n),
             "quadratic_r_fwd": qfwd[idx],
             "quadratic_r_rev": qrev[idx],
-            "n_obs": np.full(len(idx), n, dtype=np.int64),
+            "ols_slope":       ols_slope[idx],
+            "ols_intercept":   ols_intercept[idx],
+            "ols_r2":          ols_r2[idx],
+            "rank_auc_q10":    auc_q10[idx],
+            "rank_pr_auc_q10": pr_auc_q10[idx],
+            "rank_lift_q10":   lift_q10[idx],
+            "rank_auc_q20":    auc_q20[idx],
+            "rank_pr_auc_q20": pr_auc_q20[idx],
+            "rank_lift_q20":   lift_q20[idx],
+            "n_obs":           np.full(len(idx), n, dtype=np.int64),
         }
     )
 

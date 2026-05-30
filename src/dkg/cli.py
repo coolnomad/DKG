@@ -136,6 +136,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Skip CV folds and run full-data Tier 2 only (target mode). Faster for exploration.",
     )
+    parser.add_argument(
+        "--skip-tier0",
+        dest="target_skip_tier0",
+        action="store_true",
+        default=None,
+        help="Skip Tier 0 marginal profiling (target mode). Use when column filtering is not needed.",
+    )
     return parser
 
 
@@ -187,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["compute_tier"] = args.compute_tier
     if args.target_skip_cv:
         config_kwargs["target_skip_cv"] = True
+    if args.target_skip_tier0:
+        config_kwargs["target_skip_tier0"] = True
 
     from dkg.config import RunConfig
 

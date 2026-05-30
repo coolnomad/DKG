@@ -36,4 +36,5 @@ class RunConfig(BaseModel):
     target_n_folds: int = 5
     target_top_pct: float = 1.5
     target_skip_cv: bool = False
+    target_skip_tier0: bool = False
     tier0_cache_dir: str | None = None  # shared cache for X marginals across targets

@@ -28,8 +28,12 @@ def _run_tier0(
     shared_rows: list[str],
     out_dir: Path,
     config: RunConfig,
-) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+) -> tuple[pl.DataFrame | None, pl.DataFrame | None, pl.DataFrame | None]:
     """Phase 1 marginals + column filtering + split generation. Cached on disk."""
+    if config.target_skip_tier0:
+        _status("[tier0] skipped (--skip-tier0)")
+        return None, None, None
+
     # Phase 1: X marginals — stored in tier0_cache_dir if set, else output_dir
     cache_dir = Path(config.tier0_cache_dir) if config.tier0_cache_dir else out_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -138,8 +142,8 @@ def _run_full(
     x_cols: list[str],
     y_vec: np.ndarray,
     target_col: str,
-    phase1_x: pl.DataFrame,
-    phase1_y: pl.DataFrame,
+    phase1_x: pl.DataFrame | None,
+    phase1_y: pl.DataFrame | None,
     out_dir: Path,
     config: RunConfig,
 ) -> None:

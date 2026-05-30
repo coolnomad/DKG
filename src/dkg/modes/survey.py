@@ -55,12 +55,13 @@ def run(config: RunConfig) -> None:
 
     y_idx = {col: i for i, col in enumerate(y_cols)}
     top_pct = config.survey_top_pct
+    skip_auc = config.survey_skip_auc
 
     t_total = time.monotonic()
     for k, target in enumerate(targets):
         t0 = time.monotonic()
         y_vec = Y[:, y_idx[target]]
-        df = screen_from_cache(y_vec, target, x_cols, cache, top_pct=top_pct)
+        df = screen_from_cache(y_vec, target, x_cols, cache, top_pct=top_pct, skip_auc=skip_auc)
         safe_name = target.replace("/", "_").replace("\\", "_")
         out_path = out_dir / f"survey_{safe_name}.parquet"
         df.write_parquet(str(out_path))

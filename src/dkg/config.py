@@ -43,3 +43,4 @@ class RunConfig(BaseModel):
     survey_targets: list[str] = []           # explicit Y column list (empty = all)
     survey_target_list_path: str | None = None  # path to newline-separated target list
     survey_top_pct: float = 100.0            # 100 = all predictors; lower = nominated only
+    survey_skip_auc: bool = False            # skip rank AUROC/PR-AUC (much faster per-target)

@@ -163,6 +163,13 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="F",
         help="Top-N%% of predictors to retain in survey output. Default: 100 (all).",
     )
+    parser.add_argument(
+        "--skip-auc",
+        dest="survey_skip_auc",
+        action="store_true",
+        default=None,
+        help="Skip rank AUROC/PR-AUC in survey mode. Returns only linear metrics (much faster).",
+    )
     return parser
 
 
@@ -222,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["survey_target_list_path"] = args.survey_target_list_path
     if args.survey_top_pct is not None:
         config_kwargs["survey_top_pct"] = args.survey_top_pct
+    if args.survey_skip_auc:
+        config_kwargs["survey_skip_auc"] = True
 
     from dkg.config import RunConfig
 

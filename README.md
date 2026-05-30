@@ -96,6 +96,19 @@ uv run dkg --mode target \
   --n-jobs -1
 ```
 
+**Fast local screen (all predictors, cheap metrics only, ~24s):**
+```bash
+uv run dkg --mode target \
+  --x-matrix data/XP_26Q1.feather \
+  --y-matrix data/CRISPR_26Q1.feather \
+  --target-col "TP63..8626." \
+  --output-dir output/tp63_screen \
+  --skip-cv --skip-tier0 --skip-tier2 \
+  --n-jobs -1
+```
+
+Writes `tier1_target_full.parquet` — one row per predictor with Pearson, Spearman, OLS slope, rank AUROC/PR-AUC at Q10/Q20. Load immediately to rank and nominate pairs; fire off Tier 2 on the top N while reviewing results.
+
 **Exploration / universe sweep (fast tier, no CV, no Tier 0):**
 ```bash
 uv run dkg --mode target \
@@ -136,6 +149,7 @@ uv run dkg --mode target --config-json base_config.json \
 | `--compute-tier full` | All phases 2–9 (default). |
 | `--skip-cv` | Skip CV folds entirely; run full-data Tier 2 only. |
 | `--skip-tier0` | Skip marginal profiling. Use when column filtering is not needed (e.g. batch sweeps). |
+| `--skip-tier2` | Skip Tier 2 deep analysis. Runs vectorized Tier 1 screen on all predictors and writes `tier1_target_full.parquet`. ~24s for 19K predictors at 1,465 rows. |
 
 ## Outputs
 
@@ -145,6 +159,7 @@ uv run dkg --mode target --config-json base_config.json \
 | `tier1_target_fold{k}.parquet` | Nominated pairs for fold k |
 | `tier2_target_fold{k}.parquet` | Phase 2-9 results, training rows, fold k |
 | `tier2_target_full.parquet` | Phase 2-9 results for all predictors, all rows |
+| `tier1_target_full.parquet` | Vectorized screen results for all predictors (--skip-tier2 mode) |
 | `output/cache/tier0_marginals_x.parquet` | Shared predictor column profiles |
 
 See `OUTPUT_COLUMNS.md` for a full description of every column (~150 total).

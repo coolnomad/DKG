@@ -161,8 +161,23 @@ Speedup on full-data run: **~2.5×** (fast vs full). CV folds contribute ~14% of
 - Phase 8: energy distance, Wasserstein
 - Phase 9 full: logistic CV, RMSE/MAE/CV-R²
 
+### --skip-tier2: Tier 1-only mode
+
+Added `--skip-tier2` flag. When set alongside `--skip-cv --skip-tier0`, runs only the vectorized Tier 1 screen on all predictors (no nomination filter, `top_pct=100`) and writes `tier1_target_full.parquet`. No Tier 2 per-pair loop.
+
+**Benchmark:** 19,215 predictors × 1,465 rows → **~24s total.** One row per predictor with:
+- Pearson r + p, Spearman rho + p
+- Quadratic r fwd/rev
+- OLS slope, intercept, R²
+- Rank AUROC Q10/Q20, Rank PR-AUC Q10/Q20, lift Q10/Q20
+
+**Intended workflow:**
+1. Run `--skip-cv --skip-tier0 --skip-tier2` locally (~24s) → browse `tier1_target_full.parquet`
+2. Nominate top-N pairs by any metric
+3. Fire Tier 2 on nominated pairs on batch compute while reviewing Tier 1 results
+
 ### Local / batch split architecture
 
-Proposed for universe sweep:
-1. **Local vectorized pass** — Tier 1 extended screen over full X×Y matrix → all linear/rank metrics for all pairs, minutes per target
-2. **Batch** — phases 3–7 on nominated pairs only; workers receive nominated pair lists, not full matrices
+Implemented for universe sweep:
+1. **Local vectorized pass** (`--skip-cv --skip-tier0 --skip-tier2`) — all linear/rank metrics for all 19K predictors in ~24s per target
+2. **Batch** (`--compute-tier fast --skip-cv --skip-tier0`) — phases 3–7 on all or nominated pairs; ~223s per target

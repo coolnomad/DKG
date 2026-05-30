@@ -256,9 +256,12 @@ def summarize_phase9_fast(
     tail_event = yc <= left_tail_threshold
     tail_event_q20 = yc <= float(np.quantile(yc, 0.20))
 
-    # Use x directly as discrimination score (higher x → predicted non-tail,
-    # so invert for left-tail enrichment by negating x).
-    score = -xc
+    # Use x as discrimination score, direction-corrected for the tail.
+    # Left tail = low y.  If pearson_r < 0, high x → low y → sensitive tail,
+    # so high x = high score (use +xc).  If pearson_r >= 0, low x → low y,
+    # so we need low x = high score (use -xc).
+    r_xy = float(np.corrcoef(xc, yc)[0, 1])
+    score = xc if r_xy < 0 else -xc
 
     tail_prevalence = float(np.mean(tail_event))
     tail_auc = _calc_auc(tail_event, score)

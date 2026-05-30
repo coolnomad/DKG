@@ -85,11 +85,14 @@ def _pearson_pair(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float, fl
 def _rank_auc_from_order(
     order: np.ndarray,
     tail: np.ndarray,
+    flip: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Rank-based AUROC and PR-AUC using a precomputed sort order. O(N*P), no sorting.
 
     order: (n, p) int — precomputed ascending argsort indices into y/tail.
     tail:  (n,) bool — True = left-tail event.
+    flip:  (p,) bool — reverse sort order for columns with positive Pearson r,
+           so high X (not low X) predicts the sensitive tail.
     Returns auc (p,), pr_auc (p,).
     """
     n, p = order.shape
@@ -97,6 +100,10 @@ def _rank_auc_from_order(
     n_neg = n - n_pos
     if n_pos == 0 or n_neg == 0:
         return np.full(p, np.nan), np.full(p, np.nan)
+
+    if flip is not None and np.any(flip):
+        order = order.copy()
+        order[:, flip] = order[::-1, flip]
 
     tail_s = tail[order]   # (n, p) bool — indexing only, no sort
 
@@ -119,11 +126,13 @@ def _rank_auc_from_order(
 def _rank_auc_block(
     X: np.ndarray,
     tail: np.ndarray,
+    flip: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Vectorized rank-based AUROC and PR-AUC across p columns.
 
-    X: (n, p) float64, no NaNs. tail: (n,) bool — True = left-tail event.
-    Low x = predicted tail (ascending sort = high discrimination score).
+    X:    (n, p) float64, no NaNs. tail: (n,) bool — True = left-tail event.
+    flip: (p,) bool — negate score for positively-associated predictors so
+          high X predicts the sensitive tail instead of low X.
     Returns auc (p,), pr_auc (p,).
     """
     n, p = X.shape
@@ -133,6 +142,8 @@ def _rank_auc_block(
         return np.full(p, np.nan), np.full(p, np.nan)
 
     order = np.argsort(X, axis=0)  # (n, p) ascending — int64
+    if flip is not None and np.any(flip):
+        order[:, flip] = order[::-1, flip]
     tail_s = tail[order]           # (n, p) bool
 
     tpr = np.cumsum(tail_s,  axis=0) / n_pos   # (n, p)
@@ -394,8 +405,9 @@ def screen_single_target(
     pr_auc_q20 = np.empty(p)
     for i0 in range(0, p, CHUNK_AUC):
         sl = slice(i0, min(i0 + CHUNK_AUC, p))
-        auc_q10[sl], pr_auc_q10[sl] = _rank_auc_block(X_use[:, sl], tail_q10)
-        auc_q20[sl], pr_auc_q20[sl] = _rank_auc_block(X_use[:, sl], tail_q20)
+        flip = pr[i0:min(i0 + CHUNK_AUC, p)] < 0
+        auc_q10[sl], pr_auc_q10[sl] = _rank_auc_block(X_use[:, sl], tail_q10, flip=flip)
+        auc_q20[sl], pr_auc_q20[sl] = _rank_auc_block(X_use[:, sl], tail_q20, flip=flip)
 
     lift_q10 = pr_auc_q10 / (prev_q10 + eps)
     lift_q20 = pr_auc_q20 / (prev_q20 + eps)
@@ -517,8 +529,9 @@ def screen_from_cache(
     auc_q20    = np.empty(p); pr_auc_q20 = np.empty(p)
     for i0 in range(0, p, CHUNK_AUC):
         sl = slice(i0, min(i0 + CHUNK_AUC, p))
-        auc_q10[sl],  pr_auc_q10[sl]  = _rank_auc_from_order(argsort[:, sl], tail_q10)
-        auc_q20[sl],  pr_auc_q20[sl]  = _rank_auc_from_order(argsort[:, sl], tail_q20)
+        flip = pr[i0:min(i0 + CHUNK_AUC, p)] < 0
+        auc_q10[sl],  pr_auc_q10[sl]  = _rank_auc_from_order(argsort[:, sl], tail_q10, flip=flip)
+        auc_q20[sl],  pr_auc_q20[sl]  = _rank_auc_from_order(argsort[:, sl], tail_q20, flip=flip)
 
     lift_q10 = pr_auc_q10 / (prev_q10 + eps)
     lift_q20 = pr_auc_q20 / (prev_q20 + eps)

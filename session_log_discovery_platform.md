@@ -181,3 +181,41 @@ Added `--skip-tier2` flag. When set alongside `--skip-cv --skip-tier0`, runs onl
 Implemented for universe sweep:
 1. **Local vectorized pass** (`--skip-cv --skip-tier0 --skip-tier2`) — all linear/rank metrics for all 19K predictors in ~24s per target
 2. **Batch** (`--compute-tier fast --skip-cv --skip-tier0`) — phases 3–7 on all or nominated pairs; ~223s per target
+
+### Survey mode: multi-target vectorized screen
+
+Added `--mode survey`. Loops over a list of Y targets, calling the vectorized Tier 1 screen per target using a shared precomputed X cache (`xcache.py`). The two expensive O(P × N log N) transforms (rank-transform + argsort) are computed once and reused across all targets.
+
+**Benchmark:** 1,465 rows × 19,215 predictors × 1 target → **~8s per target** (excluding initial cache build of ~4.5s).
+
+**Flags:**
+- `--target-list PATH` — newline-separated list of Y column names to screen (omit = all)
+- `--survey-top-pct F` — retain only top F% of predictors by any metric (default: 100)
+- `--tier0-cache-dir DIR` — shared directory for X cache; reused across calls
+
+**Output:** one `survey_{target}.parquet` per target in `--output-dir`.
+
+---
+
+## Session — 2026-05-30
+
+### Bug fix: AUROC/PR-AUC sign direction for negatively-correlated predictors
+
+**Problem:** Rank AUROC was reporting complement values (e.g. 0.27 instead of 0.73) for predictors with negative Pearson correlation.
+
+**Root cause:** The vectorized AUROC code used ascending argsort of X (low X first) as the discrimination score for left-tail Y events. This is correct when `pearson_r > 0` (low X → low Y = left tail), but wrong when `pearson_r < 0`: for negatively-correlated predictors, high X → low Y (left tail), so the sort must be reversed (descending).
+
+TP63 expression has `pearson_r = -0.66` with TP63 dependency. High expression → more negative chronos score = more sensitive = left tail. The old code returned `rank_auc_q20 = 0.27`; `pROC::auc()` in R returned `0.73` (the complement).
+
+**Fix:**
+- `tier1.py`: `flip = pr < 0` in both `screen_single_target` and `screen_from_cache` (was `pr > 0`, which was backwards — reversed the sort for the wrong columns)
+- `phase9.py` (`summarize_phase9_fast`): `score = xc if r_xy < 0 else -xc` (was hardcoded `score = -xc`)
+
+**Verification:** Re-ran survey on TP63..8626. with corrected code:
+- `rank_auc_q20 = 0.7304` ✓ (matches pROC)
+- `rank_auc_q10 = 0.9202` ✓
+- `rank_pr_auc_q20 = 0.6254` ✓
+
+**Rule:** for left-tail discrimination, AUROC > 0.5 means the predictor discriminates in the correct direction. AUROC < 0.5 for a strong predictor is always a sign error.
+
+**Commit:** `bd3485f`

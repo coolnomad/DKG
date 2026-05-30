@@ -202,6 +202,7 @@ def summarize_phase9(
         target=y_name,
         n=n,
         n_folds=n_folds,
+        cv_mode="full",
         null_rmse=null_rmse,
         linear_rmse=linear_rmse,
         spline_rmse=spline_rmse,
@@ -225,6 +226,68 @@ def summarize_phase9(
         left_tail_auc_q20=tail_auc_q20,
         left_tail_pr_auc_q20=tail_pr_auc_q20,
         left_tail_brier_q20=tail_brier_q20,
+        pr_auc_lift_q20=pr_auc_lift_q20,
+        predictive_status="ok",
+    )
+
+
+def summarize_phase9_fast(
+    x: np.ndarray,
+    y: np.ndarray,
+    x_name: str = "x",
+    y_name: str = "y",
+) -> dict[str, Any]:
+    """Rank-based tail discrimination using x directly as the score.
+
+    No model fitting — AUROC and PR-AUC are computed by ranking observations
+    by x and checking enrichment in the left tail of y. O(N log N), no CV.
+    """
+    xc = np.asarray(x, dtype=float)
+    yc = np.asarray(y, dtype=float)
+
+    ok = ~(np.isnan(xc) | np.isnan(yc))
+    xc, yc = xc[ok], yc[ok]
+    n = int(len(xc))
+
+    if n < 30 or len(np.unique(xc)) < 10 or float(np.std(yc, ddof=1)) == 0.0:
+        return dict(predictor=x_name, target=y_name, n=n, predictive_status="insufficient_data")
+
+    left_tail_threshold = float(np.quantile(yc, 0.10))
+    tail_event = yc <= left_tail_threshold
+    tail_event_q20 = yc <= float(np.quantile(yc, 0.20))
+
+    # Use x directly as discrimination score (higher x → predicted non-tail,
+    # so invert for left-tail enrichment by negating x).
+    score = -xc
+
+    tail_prevalence = float(np.mean(tail_event))
+    tail_auc = _calc_auc(tail_event, score)
+    tail_pr_auc = _calc_pr_auc(tail_event, score)
+    eps = 1e-8
+    pr_auc_lift = tail_pr_auc / (tail_prevalence + eps) if math.isfinite(tail_pr_auc) else math.nan
+
+    tail_prevalence_q20 = float(np.mean(tail_event_q20))
+    tail_auc_q20 = _calc_auc(tail_event_q20, score)
+    tail_pr_auc_q20 = _calc_pr_auc(tail_event_q20, score)
+    pr_auc_lift_q20 = (
+        tail_pr_auc_q20 / (tail_prevalence_q20 + eps)
+        if math.isfinite(tail_pr_auc_q20)
+        else math.nan
+    )
+
+    return dict(
+        predictor=x_name,
+        target=y_name,
+        n=n,
+        cv_mode="rank_only",
+        left_tail_threshold=left_tail_threshold,
+        left_tail_prevalence=tail_prevalence,
+        left_tail_auc=tail_auc,
+        left_tail_pr_auc=tail_pr_auc,
+        pr_auc_lift=pr_auc_lift,
+        left_tail_prevalence_q20=tail_prevalence_q20,
+        left_tail_auc_q20=tail_auc_q20,
+        left_tail_pr_auc_q20=tail_pr_auc_q20,
         pr_auc_lift_q20=pr_auc_lift_q20,
         predictive_status="ok",
     )

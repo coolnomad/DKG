@@ -18,7 +18,7 @@ from dkg.phases.phase5 import summarize_phase5
 from dkg.phases.phase6 import summarize_phase6
 from dkg.phases.phase7 import summarize_phase7
 from dkg.phases.phase8 import summarize_phase8
-from dkg.phases.phase9 import summarize_phase9
+from dkg.phases.phase9 import summarize_phase9, summarize_phase9_fast
 from dkg.tier1 import passes_threshold
 
 logger = logging.getLogger(__name__)
@@ -40,11 +40,10 @@ def _process_pair(
 
     fast = config.compute_tier == "fast"
 
-    if not fast:
-        try:
-            _merge(2, summarize_phase2(x, y, x_col, y_col))
-        except Exception as exc:
-            logger.warning("Phase 2 failed for (%s, %s): %s", x_col, y_col, exc)
+    try:
+        _merge(2, summarize_phase2(x, y, x_col, y_col, fast=fast))
+    except Exception as exc:
+        logger.warning("Phase 2 failed for (%s, %s): %s", x_col, y_col, exc)
 
     try:
         _merge(3, summarize_phase3(x, y, x_col, y_col, spline_df=config.spline_df))
@@ -80,13 +79,16 @@ def _process_pair(
         except Exception as exc:
             logger.warning("Phase 8 failed for (%s, %s): %s", x_col, y_col, exc)
 
-        try:
+    try:
+        if fast:
+            _merge(9, summarize_phase9_fast(x, y, x_col, y_col))
+        else:
             _merge(
                 9,
                 summarize_phase9(x, y, x_col, y_col, spline_df=config.spline_df, seed=config.seed),
             )
-        except Exception as exc:
-            logger.warning("Phase 9 failed for (%s, %s): %s", x_col, y_col, exc)
+    except Exception as exc:
+        logger.warning("Phase 9 failed for (%s, %s): %s", x_col, y_col, exc)
 
     return row
 

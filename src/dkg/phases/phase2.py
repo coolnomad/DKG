@@ -57,6 +57,7 @@ def _fit_directional(
     y: np.ndarray,
     x_name: str,
     y_name: str,
+    fast: bool = False,
 ) -> dict[str, Any]:
     """OLS + Huber robust regression for predictor x → target y."""
     n = len(x)
@@ -70,7 +71,8 @@ def _fit_directional(
 
     robust_intercept = math.nan
     robust_slope = math.nan
-    if _HAS_STATSMODELS:
+    slope_ratio = math.nan
+    if not fast and _HAS_STATSMODELS:
         try:
             X_design = np.column_stack([np.ones(n, dtype=float), x])
             rlm = RLM(y, X_design).fit()
@@ -79,12 +81,13 @@ def _fit_directional(
         except Exception:
             pass
 
-    # slope_ratio = robust_slope / (linear_slope + sign(linear_slope) * 1e-8)
-    # sign(0) = 0 in R, so denom = 0 when linear_slope == 0 → ratio is nan/inf.
-    s_ls = float(np.sign(linear_slope))
-    denom = linear_slope + s_ls * 1e-8
-    with np.errstate(divide="ignore", invalid="ignore"):
-        slope_ratio = float(np.float64(robust_slope) / np.float64(denom))
+    if not fast:
+        # slope_ratio = robust_slope / (linear_slope + sign(linear_slope) * 1e-8)
+        # sign(0) = 0 in R, so denom = 0 when linear_slope == 0 → ratio is nan/inf.
+        s_ls = float(np.sign(linear_slope))
+        denom = linear_slope + s_ls * 1e-8
+        with np.errstate(divide="ignore", invalid="ignore"):
+            slope_ratio = float(np.float64(robust_slope) / np.float64(denom))
 
     return dict(
         predictor=x_name,
@@ -106,6 +109,7 @@ def summarize_phase2(
     y: np.ndarray,
     x_name: str = "x",
     y_name: str = "y",
+    fast: bool = False,
 ) -> dict[str, Any]:
     """Global linear association between x and y.
 
@@ -129,9 +133,13 @@ def summarize_phase2(
     ci_lo, ci_hi = _pearson_ci(pearson_r, n)
 
     spearman_rho, spearman_p = stats.spearmanr(xc, yc)
-    kendall_tau, kendall_p = stats.kendalltau(xc, yc)
 
-    distance_cor = _dcor(xc, yc)
+    kendall_tau = math.nan
+    kendall_p = math.nan
+    distance_cor = math.nan
+    if not fast:
+        kendall_tau, kendall_p = stats.kendalltau(xc, yc)
+        distance_cor = _dcor(xc, yc)
 
     sym: dict[str, Any] = dict(
         x_name=x_name,
@@ -151,7 +159,7 @@ def summarize_phase2(
     return dict(
         symmetric_pair_metrics=sym,
         directional_edge_metrics=[
-            _fit_directional(xc, yc, x_name, y_name),
-            _fit_directional(yc, xc, y_name, x_name),
+            _fit_directional(xc, yc, x_name, y_name, fast=fast),
+            _fit_directional(yc, xc, y_name, x_name, fast=fast),
         ],
     )

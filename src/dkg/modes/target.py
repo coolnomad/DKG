@@ -56,19 +56,21 @@ def _run_tier0(
         phase1_y.write_parquet(str(marginals_y_path))
         _status(f"[tier0] Y marginals done  ({time.monotonic() - t0:.1f}s)")
 
-    # Splits
-    splits_path = out_dir / "splits.parquet"
-    if splits_path.exists():
-        _status(f"[tier0] loading cached splits  ({config.target_n_folds} folds)")
-        splits_df = load_splits(splits_path)
-    else:
-        _status(
-            f"[tier0] generating {config.target_n_folds}-fold splits"
-            f"  (n={len(shared_rows)}, seed={config.seed})"
-        )
-        splits_df = make_splits(shared_rows, n_folds=config.target_n_folds, seed=config.seed)
-        save_splits(splits_df, splits_path)
-        _status(f"[tier0] splits saved  -> {splits_path}")
+    # Splits — skipped in no-CV mode
+    splits_df = None
+    if not config.target_skip_cv:
+        splits_path = out_dir / "splits.parquet"
+        if splits_path.exists():
+            _status(f"[tier0] loading cached splits  ({config.target_n_folds} folds)")
+            splits_df = load_splits(splits_path)
+        else:
+            _status(
+                f"[tier0] generating {config.target_n_folds}-fold splits"
+                f"  (n={len(shared_rows)}, seed={config.seed})"
+            )
+            splits_df = make_splits(shared_rows, n_folds=config.target_n_folds, seed=config.seed)
+            save_splits(splits_df, splits_path)
+            _status(f"[tier0] splits saved  -> {splits_path}")
 
     return phase1_x, phase1_y, splits_df
 
@@ -196,12 +198,15 @@ def run(config: RunConfig) -> None:
     )
 
     t_total = time.monotonic()
-    for fold in range(config.target_n_folds):
-        train_idx = get_train_indices(splits_df, fold, shared_rows)
-        _run_fold(
-            fold, train_idx, X, x_cols, y_vec, config.target_col,
-            y_vec, phase1_x, phase1_y, out_dir, config,
-        )
+    if config.target_skip_cv:
+        _status("[target] CV folds skipped (--skip-cv)")
+    else:
+        for fold in range(config.target_n_folds):
+            train_idx = get_train_indices(splits_df, fold, shared_rows)
+            _run_fold(
+                fold, train_idx, X, x_cols, y_vec, config.target_col,
+                y_vec, phase1_x, phase1_y, out_dir, config,
+            )
 
     _run_full(X, x_cols, y_vec, config.target_col, phase1_x, phase1_y, out_dir, config)
-    _status(f"[target] all done  ({time.monotonic() - t_total:.1f}s total for CV + full run)")
+    _status(f"[target] all done  ({time.monotonic() - t_total:.1f}s)")

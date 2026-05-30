@@ -129,6 +129,13 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["fast", "full"],
         help="Computational tier: fast (phases 3-7 only) or full (all phases 2-9). Default: full",
     )
+    parser.add_argument(
+        "--skip-cv",
+        dest="target_skip_cv",
+        action="store_true",
+        default=None,
+        help="Skip CV folds and run full-data Tier 2 only (target mode). Faster for exploration.",
+    )
     return parser
 
 
@@ -178,6 +185,8 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["tier0_cache_dir"] = args.tier0_cache_dir
     if args.compute_tier is not None:
         config_kwargs["compute_tier"] = args.compute_tier
+    if args.target_skip_cv:
+        config_kwargs["target_skip_cv"] = True
 
     from dkg.config import RunConfig
 

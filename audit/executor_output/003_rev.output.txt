@@ -1,0 +1,12 @@
+VERDICT: PASS
+CRITERIA:
+- **`load_matrix` returns `(float64 ndarray, row_labels, col_labels)`** — `io.py:25-28` casts to `pl.Float64` then `np.float64`, returns the three-tuple; `test_load_csv_roundtrip` asserts `dtype == np.float64` and shape.
+- **`.feather` and `.arrow` load via polars** — `io.py:16` routes both suffixes to `pl.read_ipc`; `test_load_feather_roundtrip` and `test_load_arrow_roundtrip` verify round-trips.
+- **`.csv.gz` loads correctly** — `io.py:18` includes `.csv.gz` in the branch; `test_load_csv_gz_roundtrip` writes a gzip-compressed CSV and asserts shape/dtype.
+- **`align_matrices` inner-joins on shared row labels** — `io.py:48-57` computes shared labels via dict lookup; `test_align_partial_overlap` confirms 15-row overlap from two 30-element lists; `test_align_preserves_values` verifies row correspondence.
+- **ValueError when fewer than 10 observations survive alignment** — `io.py:52-55` raises with message "need at least 10"; `test_align_below_10_rows_raises` triggers 2-row overlap and matches `"at least 10"`.
+- **All-NaN matrix raises ValueError** — `io.py:30-31` checks `np.all(np.isnan(data))`; `test_load_all_nan_raises` matches `"entirely NaN"`.
+- **All default checks pass** — audit shows ruff, mypy, and 15 pytest tests all exit 0.
+
+SUMMARY:
+All acceptance criteria are met with concrete implementation and corresponding tests. The routing logic, dtype enforcement, alignment inner-join, and all three ValueError conditions are implemented correctly and verified by the passing test suite.

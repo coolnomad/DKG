@@ -1,0 +1,11 @@
+VERDICT: PASS
+CRITERIA:
+- **`run(config)` produces all six required outputs**: `test_all_output_files_written` asserts existence of `tier0_marginals.parquet`, `tier1_screen.parquet`, `tier2_deep.parquet`, `tier3_stability.parquet`, `graph.graphml`, and `communities.parquet`. All 313 tests pass per audit.
+- **Tier 1 upper-triangle only (no duplicates, no self-pairs)**: `test_tier1_no_self_pairs` and `test_tier1_no_duplicate_pairs` verify this structurally; `screen()` is called with `X_raw, x_cols, X_raw, x_cols` which delegates upper-triangle enforcement to `dkg.tier1`.
+- **graph.graphml is networkx-readable**: `test_graphml_readable_by_networkx` reads via `nx.read_graphml` and asserts `isinstance(G, nx.Graph)`; `test_graphml_nodes_match_columns` confirms node set matches column names.
+- **communities.parquet has columns node, community_id, degree**: `test_communities_columns` asserts `{"node", "community_id", "degree"}.issubset(...)`. `write_graph_outputs` in `graph.py` builds the DataFrame with exactly those three columns.
+- **Strongly-connected nodes appear in same community**: `test_correlated_nodes_same_community` constructs two tight clusters (noise=0.05), uses `graph_edge_threshold=0.8` to isolate within-cluster edges, and asserts `a_comms != b_comms` with each group unified. Test passes per audit.
+- **All default checks pass**: Audit confirms ruff check, ruff format, mypy, and pytest all exit 0. `313 passed, 166 warnings`.
+
+SUMMARY:
+All six acceptance criteria are met with concrete test coverage and a clean audit showing 313 tests passing, zero linting/type errors. The implementation correctly delegates upper-triangle enforcement to `tier1.screen()`, builds the graph from `|pearson_r| >= config.graph_edge_threshold`, uses python-louvain with a seed parameter, and writes both `graph.graphml` and `communities.parquet` with the required schema. The module-level comment in `graph.py` documents the `graph_edge_threshold` default (0.3) and its effect.

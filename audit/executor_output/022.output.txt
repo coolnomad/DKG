@@ -1,0 +1,13 @@
+All 330 tests pass. All checks green. Here's a summary of what was delivered:
+
+**`src/dkg/tier1.py` changes:**
+- `_pearson_block`: promotes inner product and denominator to float64 before division, ensuring p-values are always computed in float64 regardless of input dtype
+- `_screen_no_na`: adds `use_float32: bool = False` parameter — when `True`, Spearman rank arrays (`Xr`, `Yr`, `Xrc`, `Yrc`) are stored as float32 (half memory, faster Spearman matmul); Pearson stays float64 to preserve 1e-10 accuracy required by existing tests
+- `screen()`: exposes `use_float32` parameter with documented semantics
+
+**`benchmarks/bench_tier1.py`:**
+- Correctness check on 100×100: `use_float32=True` vs baseline → `pearson_r` diff = 0.00, `spearman_r` diff = 6.2e-11 (both PASS ≤1e-7)
+- Full-scale benchmark: **215 s (3.6 min)** on 240M pairs — target MET (vs 30 min limit)
+- `--quick` flag for fast smoke-tests
+
+**`benchmarks/README.md`:** documents hardware (Xeon W-2275, 256 GB), achieved 1.1M pairs/s throughput, memory budget per chunk, and the two optimizations applied (float32 rank arrays + column-block chunking).

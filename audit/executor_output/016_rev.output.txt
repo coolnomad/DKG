@@ -1,0 +1,11 @@
+VERDICT: PASS
+CRITERIA:
+- **`run_stability(tier2_df, X, Y, x_cols, y_cols, config)` returns a Polars DataFrame** — function signature at `tier3.py:44` matches exactly; `test_returns_dataframe` confirms `isinstance(df, pl.DataFrame)`.
+- **Top-K pairs selected by abs(pearson_r) descending** — `tier3.py:67-72` sorts by `pl.col("pearson_r").abs()` descending and calls `.head(config.top_k)`; `test_top_k_selected_by_abs_pearson_r` verifies the best pair appears in top-1 output.
+- **Output is long-format Phase 10 results with x_col and y_col prepended** — `tier3.py:90-92` reorders columns so `id_cols = ["x_col", "y_col"]` come first; `test_x_col_y_col_first` and `test_long_format_has_metric_column` confirm `metric` and `source` columns are present.
+- **tier3_stability.parquet written to config.output_dir** — `tier3.py:58` constructs `out_path = Path(config.output_dir) / "tier3_stability.parquet"` and writes at `tier3.py:93`; `test_parquet_written` and `test_parquet_readable_and_matches` confirm file existence and content match.
+- **joblib parallelism used** — `tier3.py:77-79` calls `Parallel(n_jobs=config.n_jobs, backend="loky")(delayed(_job)(p) for p in pairs)`.
+- **All default checks pass** — audit shows ruff, mypy, and pytest all exit 0; 295 tests passed including all 8 `test_tier3.py` tests.
+
+SUMMARY:
+All six acceptance criteria are met with direct code evidence. The implementation correctly selects top-K pairs by absolute Pearson r, runs Phase 10 stability via joblib parallelism, prepends x_col/y_col to long-format output, and writes the parquet file; the test suite covers the golden path, top-K selection, parquet I/O, and edge cases (empty input, missing pearson_r), all passing cleanly.

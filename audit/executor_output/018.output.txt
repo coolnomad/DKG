@@ -1,0 +1,7 @@
+313 tests pass. All checks clean.
+
+Task 018 is complete:
+
+- **`src/dkg/graph.py`**: `build_graph()` creates a `networkx.Graph` from tier1 pairs above `graph_edge_threshold`; `detect_communities()` runs Louvain via python-louvain (fallback to community 0 if no edges); `write_graph_outputs()` writes `graph.graphml` and `communities.parquet` with `node`, `community_id`, `degree` columns.
+- **`src/dkg/modes/xx.py`**: `run()` orchestrates the full pipeline — Phase 1 marginals, Tier 1 (xx mode enforces upper-triangle), Tier 2, Tier 3, then graph construction and community detection.
+- **`tests/test_mode_xx.py`**: 10 tests covering error cases, all 6 output files, upper-triangle invariant (no self-pairs, no duplicates), graphml validity, communities schema, and the cluster-separation property.

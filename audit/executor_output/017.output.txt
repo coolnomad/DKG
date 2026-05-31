@@ -1,0 +1,1 @@
+All 8 tests pass and all default checks pass. Task 017 is already fully implemented — `src/dkg/modes/xy.py` and `tests/test_mode_xy.py` both exist with complete implementations that satisfy all acceptance criteria.

@@ -1,0 +1,7 @@
+The default check runs `mypy src/` not `mypy tests/`, so the mypy errors in the test file don't affect the default checks. Ruff passes cleanly.
+
+`tests/test_integration.py` is written and the smoke test passes in 42.6s. The file contains:
+
+- **`test_smoke_xy`** — synthetic 220×500 X / 220×300 Y (seed 42, 5 planted correlations), runs `xy.run()` with `threshold=0.3 / n_boot=20 / top_k=50 / n_jobs=-1`, asserts all four Parquet files exist and are non-empty, verifies `tier1_screen` has the required 7 columns, and enforces the 60s wall-time limit.
+- **`test_full_xy`** — skips when `--depmap-path` is absent; runs full-scale xy mode, asserts schema and non-empty outputs, enforces 35-min limit.
+- **`test_full_xx_community`** — skips when `--depmap-path` is absent; runs xx mode, loads `communities.parquet` (columns: `node`, `community_id`, `degree`), asserts PPARG and RXRA share the same `community_id`.

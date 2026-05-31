@@ -1,0 +1,1 @@
+All 12 tests pass and all default checks are clean. Both `src/dkg/tier2.py` and `tests/test_tier2.py` were already implemented — `run_deep()` filters Tier 1 pairs via `passes_threshold`, runs phases 2–9 per pair with per-phase exception handling, uses `joblib.Parallel` with `backend="loky"`, and writes `tier2_deep.parquet`. Task 015 acceptance criteria are fully met.

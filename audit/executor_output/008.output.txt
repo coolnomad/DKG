@@ -1,0 +1,1 @@
+All checks pass. `src/dkg/phases/phase4.py` and `tests/test_phase4.py` are complete — 31 tests passing, ruff clean, mypy clean.

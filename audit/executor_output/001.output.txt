@@ -1,0 +1,10 @@
+All checks pass. Here's the summary of what was created:
+
+- **`pyproject.toml`** — rewritten with runtime deps, `[dependency-groups] dev`, hatchling build backend
+- **`ruff.toml`** — `py311`, line-length 100, selects E/F/I/UP
+- **`mypy.ini`** — `strict = true`
+- **`src/dkg/__init__.py`** — exports `__version__ = "0.1.0"`
+- **`tests/test_smoke.py`** — asserts version
+- **`uv.lock`** — generated via `uv lock` (25 packages resolved)
+
+All acceptance criteria pass: `uv sync --frozen` ✓, ruff check ✓, ruff format ✓, mypy ✓, pytest 1 passed ✓.

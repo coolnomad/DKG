@@ -1,0 +1,10 @@
+All checks pass. Here's what was implemented:
+
+**`src/dkg/phases/phase7.py`** — `summarize_phase7()` ports `summarize_regime_threshold_structure()` from R:
+- Scans 25 candidate thresholds across predictor quantiles [Q10, Q90]
+- Fits piecewise OLS `y ~ 1 + x + regime + x:regime` via `np.linalg.lstsq` for each threshold
+- Selects best threshold by maximum `delta_aic = linear_aic - piecewise_aic`
+- Computes `threshold_stability`, `threshold_quantile`, `slope_sign_change`, `sd_ratio_regimes`, `left_tail_fisher_p`, and `regime_median_shift` at the best threshold
+- AIC uses the R-matching formula: `-2 * logLik + 2 * (k + 1)` with MLE variance
+
+**`tests/test_phase7.py`** — 24 tests covering field presence, sentinel conditions, identity relationships (delta_aic, delta_r2, slope_difference, sd_ratio), bounds checks, manual verification of regime_median_shift, and a test that the selected threshold truly maximizes delta_aic across the full scan grid.

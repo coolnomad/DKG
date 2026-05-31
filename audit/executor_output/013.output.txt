@@ -1,0 +1,11 @@
+All 253 tests pass, all checks clean. 
+
+`src/dkg/phases/phase9.py` and `tests/test_phase9.py` are complete. The implementation:
+
+- Ports `summarize_predictive_utility()` with all R field names matched exactly
+- 5-fold CV with `numpy.random.default_rng(seed)` fold assignment
+- Linear OLS and natural cubic spline (from phase3 helpers) per fold
+- Statsmodels `Logit` for Q10 and Q20 tail event prediction with graceful error handling
+- AUROC and PR-AUC via trapezoidal rule matching R's implementation
+- `pr_auc_lift` and `pr_auc_lift_q20` included
+- Sentinel row returned when `n < 30`, `unique(x) < 10`, or `sd(y) == 0`

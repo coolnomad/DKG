@@ -1,0 +1,7 @@
+All 20 tests pass and all default checks (ruff, mypy) are clean.
+
+**What was implemented:**
+
+- `src/dkg/phases/phase10.py`: Ports `summarize_relationship_stability()`. For each of n_boot bootstrap (with replacement, size=n) and n_boot subsample (without replacement, size=floor(n×sample_frac)) resamples, runs phases 2, 5, 7, 8 and extracts the 12 tracked metrics. Returns 24 rows (12 metrics × 2 sources) with derived columns `ci_width`, `relative_cv`, and `sign_consistency`. Returns a single sentinel row on insufficient data.
+
+- `tests/test_phase10.py`: 20 tests covering row count, column presence, source/metric completeness, sentinel conditions, derived column correctness, reproducibility, and signal-strength sanity checks.

@@ -1,0 +1,5 @@
+All checks pass. Task 016 is complete:
+
+- `src/dkg/tier3.py`: implements `run_stability()` — selects top-K pairs by `abs(pearson_r)` descending, runs `summarize_phase10` via `joblib.Parallel`, concatenates long-format results with `x_col`/`y_col` prepended, writes `tier3_stability.parquet`
+- `tests/test_tier3.py`: 10 tests covering output structure, top-K selection correctness, parquet I/O, and edge cases (empty input, missing `pearson_r`)
+- All 10 tests pass; ruff, mypy clean

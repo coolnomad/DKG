@@ -1,0 +1,6 @@
+71 tests pass (54 existing + 17 new). Task 006 is done.
+
+**What was implemented:**
+- `src/dkg/phases/phase2.py`: `summarize_phase2()` with complete-case filtering, Pearson/Spearman/Kendall via scipy, biased distance correlation (`_dcor`), Fisher z-transform CI, and OLS + Huber robust regression (statsmodels RLM) for both x→y and y→x directions. Field names match R output exactly.
+- `tests/test_phase2.py`: 17 tests covering field presence, scipy-matching values (atol=1e-10), dcor properties, CI containment, and slope ratio behavior.
+- Added `statsmodels` to `pyproject.toml` dependencies.

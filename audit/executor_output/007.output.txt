@@ -1,0 +1,12 @@
+All checks pass. Here's what was implemented:
+
+**`src/dkg/phases/phase3.py`** — `summarize_phase3()` that:
+- Applies complete-case filtering
+- Fits a linear OLS model and computes R² and AIC
+- Fits a natural cubic spline (matching R's `ns(x, df=spline_df)` — `df-1` interior knots at uniform quantiles, boundary knots at `min(x)`/`max(x)`) and computes R², AIC
+- Runs an F-test for nonlinearity using the formula from the task spec
+- Computes `monotonicity_score`, `mean_shape_direction`, `spline_direction_changes` from sorted spline predictions
+- Evaluates `spline_pred_q10_to_q90` and `spline_pred_range` using stored knots for correct prediction at new x values
+- Returns all 16 fields matching R's output names
+
+**`tests/test_phase3.py`** — 26 tests covering field presence, naming, NaN handling, numerical correctness (R² vs Pearson, consistency of delta fields), and behavioral checks (monotone data, nonlinear data, direction signs).

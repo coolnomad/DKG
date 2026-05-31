@@ -1,0 +1,5 @@
+All checks pass. `test_phase2_synthetic_no_r` runs unconditionally and passes; the 9 R-dependent tests skip cleanly since Rscript isn't on this machine's PATH.
+
+Created two files:
+- `tests/conftest.py` — registers the `--depmap-path` CLI option and exposes it as a fixture
+- `tests/test_phase_parity.py` — 10 tests covering phases 1-9, with atol=1e-6 for deterministic phases and atol=1e-3 for phase 9 (CV RNG divergence documented in module docstring and inline comment)

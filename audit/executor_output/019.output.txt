@@ -1,0 +1,7 @@
+All checks pass. 3 tests pass (preflight unit tests + the `pair_x` missing test), 1 integration test skipped because Rscript isn't on this machine's PATH.
+
+**What was implemented:**
+
+- **`run_pair.R`** — R wrapper that sources `fitting_functions.R`, runs all 10 phases, pivots Phase 10 from long to wide, and writes a single wide-format CSV row.
+- **`src/dkg/modes/pair.py`** — `run(config)` that preflights Rscript/fitting_functions.R, loads + aligns matrices, writes a temp CSV, delegates to R via `subprocess.run`, reads the output CSV, and writes `pair_result.parquet`.
+- **`tests/test_mode_pair.py`** — Preflight unit tests (always run) + an integration test that auto-skips when Rscript or `fitting_functions.R` isn't available.

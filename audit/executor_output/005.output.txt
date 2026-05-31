@@ -1,0 +1,8 @@
+Task 005 is done. All 54 tests pass (30 existing + 24 new). Here's a summary of what was implemented:
+
+**`src/dkg/phases/phase1.py`:**
+- `summarize_phase1()` — ports all fields from R's `summarize_vector_geometry()`: completeness counts, 11 quantiles, mean/sd/mad/IQR, bin stats (n_bins=5), skewness/kurtosis/bimodality, Hartigan dip test via `diptest`, scipy KDE peak/valley/ruggedness, effective support entropy, tail spans, plus 6 new LOO robustness fields
+- `sweep_phase1()` — applies per-column, returns a Polars DataFrame
+- `filter_by_geometry()` — mirrors R's `filter_features_by_geometry()` with same default thresholds and priority order
+
+**`tests/test_phase1.py`** — 24 tests covering all acceptance criteria including sentinel behavior, LOO types, filter logic, and sweep shape.

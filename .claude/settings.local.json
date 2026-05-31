@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where Rscript)",
+      "Read(//c/Program Files/R/**)",
+      "Read(//c/Program Files/R//**)",
+      "Bash(uv run python -c ' *)"
+    ]
+  }
+}

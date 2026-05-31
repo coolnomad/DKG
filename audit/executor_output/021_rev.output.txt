@@ -1,0 +1,11 @@
+VERDICT: PASS
+CRITERIA:
+- **Tests for all phases 1-9 present**: `test_phase1_parity` through `test_phase9_parity` all present in the file — 9 R-dependent tests confirmed.
+- **Each test compares all numeric output fields within documented tolerance**: `_assert_fields_close` iterates all numeric fields from R output and checks `abs(py_val - r_val) > atol`, applied in every phase test.
+- **Tests skipped if Rscript not on PATH or --depmap-path not provided**: `_skip_if_no_r_or_data` calls `pytest.skip("Rscript not on PATH")` and `pytest.skip("--depmap-path not provided")`; validation output confirms 9 skips when Rscript absent.
+- **At least one unconditional synthetic test**: `test_phase2_synthetic_no_r` uses `np.random.default_rng(42)`, imports no R, and PASSED unconditionally in the audit run.
+- **Phase 9 CV tolerance documented with rationale**: Module docstring and inline comment above `test_phase9_parity` both explain RNG divergence (`numpy.default_rng.permutation` vs `base::sample`) justifying `atol=1e-3`.
+- **All default checks pass**: Audit shows ruff, mypy, and full pytest suite all exit 0; validation command `uv run pytest tests/test_phase_parity.py -v -k "not slow"` shows 1 passed, 9 skipped (correct behavior without Rscript).
+
+SUMMARY:
+All five acceptance criteria are met with concrete evidence. The file contains parity tests for all 9 phases, a skip mechanism keyed on Rscript availability and `--depmap-path`, one unconditional synthetic test that passed in CI, and a clearly documented `atol=1e-3` rationale for Phase 9's CV-based RNG divergence. The full check suite and validation command both exited cleanly.

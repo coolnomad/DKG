@@ -1,0 +1,11 @@
+VERDICT: PASS
+CRITERIA:
+- [PASS] `--help` exits 0: `test_help_exits_zero` asserts `exc_info.value.code == 0`; argparse `--help` always exits 0.
+- [PASS] `--version` exits 0 and prints version: `test_version_exits_zero` checks `exc_info.value.code == 0` and `"dkg" in captured.out`; `_get_version()` uses `importlib.metadata.version("dkg")`.
+- [PASS] Dispatches to `modes.xy.run()`: `test_dispatch_xy` patches and asserts `mock_run.assert_called_once()` with `config.mode == "xy"`, correct paths, and output dir.
+- [PASS] `--config-json` merges before CLI flags: `test_config_json_cli_overrides` confirms JSON base `top_k=500` is overridden to `999` by `--top-k 999`.
+- [PASS] Invalid mode exits **1** with error to stderr: `_Parser` subclass overrides `error()` to call `self.exit(1, ...)`, so argparse `choices` validation exits with code 1 (not 2). `test_invalid_mode_exits_one` asserts `exc_info.value.code == 1` and `"error" in capsys.readouterr().err.lower()`. This directly addresses the previous reviewer's FAIL criterion.
+- [PASS] All default checks pass: audit shows ruff, mypy, and pytest (329 passed, 1 skipped) all exit 0.
+
+SUMMARY:
+The previous FAIL has been resolved. The `_Parser` subclass overrides `argparse.ArgumentParser.error()` to call `self.exit(1, ...)` instead of the default exit code 2, so invalid `--mode` values now exit with code 1. A corresponding test `test_invalid_mode_exits_one` verifies both the exit code and the presence of "error" in stderr. All six acceptance criteria are now met with concrete test coverage and clean static analysis.

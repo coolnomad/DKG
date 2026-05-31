@@ -1,0 +1,7 @@
+All checks pass. Task 002 is complete:
+
+- `RunConfig` in `src/dkg/config.py` with all 16 fields and sensible defaults
+- All stub modules created (`dkg.io`, `dkg.tier1/2/3`, `dkg.graph`, `dkg.cli`, phases 1-10, modes xy/xx/pair)
+- `pyproject.toml` updated with `dkg = "dkg.__main__:main"` entry point
+- `python -m dkg --version` prints `0.1.0` and exits 0
+- 4 tests in `tests/test_config.py` all pass; ruff, mypy clean

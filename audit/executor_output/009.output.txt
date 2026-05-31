@@ -1,0 +1,1 @@
+152 tests pass across all phases. Phase 5 is done — `src/dkg/phases/phase5.py` and `tests/test_phase5.py` implement and verify `summarize_tail_behavior()` with all required fields, numerical accuracy tests for `left_tail_risk_ratio`, `left_tail_risk_difference`, and `left_fisher_p`, plus the sentinel guard for insufficient data.

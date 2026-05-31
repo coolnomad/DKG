@@ -1,0 +1,1 @@
+All 13 tests pass. The `_Parser.error` override was already correct — I just added the missing `test_invalid_mode_exits_one` test that asserts exit code 1 and an error message on stderr.

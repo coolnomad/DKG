@@ -1,0 +1,10 @@
+VERDICT: PASS
+CRITERIA:
+- **Output dict contains all fields produced by the R function with matching names**: `_EXPECTED_FIELDS` in test lists 32 fields; `summarize_phase7` returns all of them in the `return dict(...)` block at lines 153–187. `test_all_fields_present()` verifies this at runtime (195 passed).
+- **Best threshold selection uses delta_aic (not RSS minimization)**: `best = results[int(np.argmax(delta_aics))]` (phase7.py line ~131); `test_best_threshold_maximises_delta_aic` confirms no other threshold exceeds it.
+- **threshold_stability, threshold_quantile, slope_sign_change all present**: All three computed and returned — `threshold_stability = float(np.mean(delta_aics > 0.0))`, `threshold_quantile = float(np.mean(xc <= best_threshold))`, `slope_sign_change = bool(np.sign(...) != np.sign(...))`.
+- **left_tail_fisher_p and regime_median_shift present**: `left_tail_fisher_p` computed via `stats.fisher_exact(tab)` and `regime_median_shift = float(np.median(yc[best_regime]) - np.median(yc[~best_regime]))`, both in return dict and verified by dedicated tests.
+- **All default checks pass**: Audit shows `195 passed, 3 warnings` with exit code 0 across ruff, mypy, and pytest.
+
+SUMMARY:
+All five acceptance criteria are met with direct code evidence. The implementation correctly ports the R function with matching field names, uses `delta_aic` maximization for threshold selection, computes all required derived statistics, and passes the full test suite (195 tests, 0 failures) along with linting and type checks.

@@ -1,0 +1,8 @@
+All 29 tests pass and all default checks pass. Here's a summary of what was implemented:
+
+**`src/dkg/tier1.py`** — two paths:
+- **No-NA fast path** (`_screen_no_na`): fully vectorized via `(Xc.T @ Yc) / (n * std_x * std_y)`. Spearman reuses the same path after `scipy.stats.rankdata(axis=0)`. Processes X in chunks of 500 columns (≈192 MB peak per block). Upper-triangle filtering for `xx` mode is done with a broadcastable mask — no per-pair Python loops.
+- **NA fallback** (`_screen_with_na`): per-pair complete-case masking for when NaNs exist. Documented as slow at scale; pre-filtering NaN columns via `dkg.io` before calling `screen()` is the recommended path.
+- `passes_threshold(row, config)` checks `|pearson_r| ≥ threshold OR |spearman_r| ≥ threshold`.
+
+**`tests/test_tier1.py`** — 14 tests covering: column schema, Pearson/Spearman atol=1e-10 vs scipy on a 50-col case, `xx` upper-triangle and no-self-pairs, parquet written/readable, threshold filtering, `passes_threshold`, and NA complete-case n_obs.

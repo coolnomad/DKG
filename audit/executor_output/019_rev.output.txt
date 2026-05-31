@@ -1,0 +1,11 @@
+VERDICT: PASS
+
+CRITERIA:
+- **`run(config)` with valid pair_x and pair_y produces pair_result.parquet in config.output_dir**: `pair.py` writes `out_path = output_dir / "pair_result.parquet"` via `df.write_parquet(str(out_path))`. Integration test `test_run_produces_parquet_with_phase2_metrics` verifies this path; code path is correct and complete.
+- **Preflight raises clear error with remediation if Rscript not on PATH**: `_preflight()` raises `RuntimeError("Rscript not found on PATH.\nRemediation: install R from https://cran.r-project.org…")`. Test `test_preflight_raises_if_no_rscript` passed in audit (316 passed).
+- **Preflight raises clear error if fitting_functions.R not found**: `_preflight()` raises `RuntimeError(f"fitting_functions.R not found at {ff.resolve()}.\nRemediation: run dkg from the project root…")`. Test `test_preflight_raises_if_no_fitting_functions` passed in audit.
+- **pair_result.parquet readable by polars with at minimum phase 2 metrics**: `run_pair.R` computes `jg_df` (prefixed `p2jg_`) and `sym` (prefixed `p2sym_`), assembles all phases into a single `cbind(…)` and writes CSV; `pair.py` reads with `pl.read_csv` and writes parquet. Integration test asserts `p2sym_pearson_r` and `p2jg_mutual_information` columns; test is correctly skipif-guarded per requirements, and audit shows 1 skipped (expected — no Rscript on CI PATH).
+- **All default checks pass**: Audit confirms ruff check ✓, ruff format ✓, mypy ✓, pytest 316 passed / 1 skipped ✓.
+
+SUMMARY:
+All five acceptance criteria are satisfied. Preflight errors are well-structured with remediation instructions and covered by always-run unit tests. The R wrapper covers all 10 phases in wide-format output with consistent prefixes, and the Python layer correctly assembles and persists the parquet. The single skipped test is the integration path appropriately guarded by `skipif` as required, consistent with the 1 skip shown in the audit.

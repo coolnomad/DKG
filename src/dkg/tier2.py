@@ -164,7 +164,7 @@ def run_deep(
         return None if isinstance(v, float) and math.isnan(v) else v
 
     normalised = [{k: _clean(rec.get(k)) for k in all_keys} for rec in records]
-    result = pl.from_dicts(normalised)
+    result = pl.from_dicts(normalised, infer_schema_length=len(normalised))
 
     # Carry forward Tier 1 correlation columns so downstream (Tier 3) can rank
     # by pearson_r without needing a separate reference to tier1_df.

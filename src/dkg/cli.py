@@ -170,6 +170,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Skip rank AUROC/PR-AUC in survey mode. Returns only linear metrics (much faster).",
     )
+    parser.add_argument(
+        "--skip-tier3",
+        dest="skip_tier3",
+        action="store_true",
+        default=None,
+        help="Skip Tier 3 bootstrap stability (xx mode).",
+    )
     return parser
 
 
@@ -231,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
         config_kwargs["survey_top_pct"] = args.survey_top_pct
     if args.survey_skip_auc:
         config_kwargs["survey_skip_auc"] = True
+    if args.skip_tier3:
+        config_kwargs["skip_tier3"] = True
 
     from dkg.config import RunConfig
 

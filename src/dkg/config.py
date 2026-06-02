@@ -38,6 +38,7 @@ class RunConfig(BaseModel):
     target_skip_cv: bool = False
     target_skip_tier0: bool = False
     target_skip_tier2: bool = False
+    skip_tier3: bool = False
     tier0_cache_dir: str | None = None  # shared cache for X marginals across targets
     # --- survey mode ---
     survey_targets: list[str] = []           # explicit Y column list (empty = all)

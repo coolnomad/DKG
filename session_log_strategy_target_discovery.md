@@ -1137,3 +1137,872 @@ The enrichment validates the community partition.
 5. **cBioPortal validation**: NMT2-low prevalence per TCGA cohort + module score calibration
 6. **Genomic anchor screen**: ZEB1 CNA / NMT2 methylation in TCGA enriched lineages
 7. **Pick 2 additional targets** from the qualified list with interesting biology for the talk
+
+---
+
+## Joint XX+XY Graph Strategy for NMT1 (2026-06-01)
+
+### Motivation
+
+The PD microbiome analysis felt more productive than NMT1 because it used a joint graph:
+XX co-occurrence edges + XY (taxon→PD outcome) edges merged into a single NetworkX graph,
+with the disease node inside. This enabled betweenness centrality, dist_from_PD, and
+community placement of the target node itself -- all in one structure.
+
+NMT1 previously had only separate XY analysis and a top-50 XX subset. This section
+documents the strategy to build the equivalent joint structure for NMT1.
+
+### Data inventory
+
+- **XX co-expression graph:** `output/xp_graph/tier1_screen.parquet`
+  - 20,302 genes, 41.8M pairs stored (built at |r| >= 0.2)
+  - Distribution: 10.1M pairs at |r|>=0.3, 640K at |r|>=0.5, 125K at |r|>=0.6, 19K at |r|>=0.7
+  - Decision: **r >= 0.6, positive only** for XX edges (co-expression signal; below 0.5 is
+    statistically significant but biologically noise-dominated at n=1,400+ cell lines)
+
+- **XY (expression → NMT1 dependency):** `output/NMT1_full/tier2_target_full.parquet`
+  - 19,215 genes × NMT1; pearson_r inside `p2_symmetric_pair_metrics` struct column
+  - Range: -0.30 to +0.50; 510 genes at |r|>=0.2, only 6 at |r|>=0.3
+  - Decision: **|r| >= 0.2** for XY edges (NMT1 signal is weak; stricter threshold leaves
+    the NMT1 node nearly isolated in the graph)
+
+### Joint graph construction
+
+Script: `scripts/nmt1_joint_graph.py`
+
+Key design decisions vs. the naive approach:
+- XX edges positive-only (anti-correlation merges biologically distinct communities)
+- XY edges signed (|r| as weight, sign stored as edge attribute)
+- Separate thresholds for XX (0.6) and XY (0.2)
+- GraphML write optional (off by default -- too large for 125K+ edge graphs)
+- p2_symmetric_pair_metrics struct unnested automatically at load time
+
+Run:
+```
+uv run python scripts/nmt1_joint_graph.py \
+    --xx-tier1       output/xp_graph/tier1_screen.parquet \
+    --xy-tier2       output/NMT1_full/tier2_target_full.parquet \
+    --output-dir     output/NMT1_full/joint_graph \
+    --target-col     "NMT1..4836." \
+    --edge-threshold 0.6 \
+    --xy-threshold   0.2
+```
+
+### Joint graph results
+
+- 11,312 nodes, 122,618 edges (122,108 XX + 510 XY), 1,023 Louvain communities
+- Betweenness centrality runtime: ~43 min (exact, not approximated) at 122K edges
+- **NMT1 node: community 25, degree 510, betweenness 0.002**
+- Top betweenness nodes (HOOK2, MARK2, SF1, SPDL1) all have dist=inf -- disconnected
+  component from NMT1. The NMT1 community is structurally isolated from the XX backbone.
+
+**Key finding:** all 510 XY neighbours have degree=1 (connect only to NMT1, no XX edges
+at r>=0.6). NMT1 dependency correlates with genes that are not tightly co-expressed with
+each other. The joint graph is fragmented -- NMT1 does not sit inside a single co-expression
+module.
+
+### Pivot: community membership analysis
+
+Rather than forcing a joint graph, ask the better question: **which XX co-expression
+communities do the NMT1 XY neighbours belong to?**
+
+Join `joint_graph/joint_edges.parquet` (XY edges) to `xp_graph/communities.parquet` (53
+XX communities on 20,302 genes, built at r>=0.2 tier1 / r>=0.3 graph threshold).
+
+Results (497/510 XY neighbours matched):
+
+| XX Community | NMT1 neighbours | Comm size | % | Mean r | Character |
+|---|---|---|---|---|---|
+| **10** | **342** | 4,225 | 8.1% | +0.233 | Mesenchymal / ECM |
+| **5** | **125** | 3,396 | 3.7% | -0.222 | Epithelial / cytoskeletal |
+| 4 | 12 | 4,914 | 0.2% | -0.216 | Mixed |
+| 26 | 10 | 4,541 | 0.2% | +0.129 | Mixed |
+| 2 | 8 | 3,163 | 0.3% | -0.214 | Mitochondrial / oxidative |
+
+**XX community 10 = the NMT1 vulnerability module.** 342 of 510 XY neighbours (67%)
+concentrate in a single 4,225-gene mesenchymal co-expression module (VIM, VCAN, TIMP2,
+DKK3, MRC2, FHL1).
+
+### XY community → XX community convergence
+
+Mapped XY biomarker communities (C1/C3/C4 from `biomarker_communities.parquet`) onto XX
+communities to test whether shape-based XY separation corresponds to XX co-expression
+structure:
+
+**C3 (EMT core, n=64) → XX comm 10: 63/64 genes (98%)** -- near-perfect convergence
+**C4 (EMT signaling, n=108) → XX comm 10: 103/108 genes (95%)** -- also converges
+
+C3 and C4 were separated by XY distributional shape (execution layer vs induction layer
+of the mesenchymal program), but in XX co-expression space they are a **single unified
+module**. The shape-based XY split is a functional sub-structure within one co-regulatory
+program.
+
+**C1 (presence/luminal, n=97) → splits across three XX communities:**
+- XX comm 5: 75 genes (epithelial polarity program)
+- XX comm 2: 12 genes (L2HGDH, PPARGC1B, TRAP1 -- mitochondrial/oxidative metabolism)
+- XX comm 4: 6 genes (scattered)
+
+C1 is a heterogeneous coalition: the luminal biomarker axis is not a single co-expression
+module. It is two biologically distinct programs (epithelial polarity + mitochondrial
+metabolism) that happen to share the same XY relationship direction with NMT1.
+
+### XX Tier 2 within biomarker communities (in progress, 2026-06-01)
+
+**Hypothesis:** C3 and C4 are unified in XX Pearson space (same co-expression module), but
+may have different pairwise distributional shapes within that module. Tier 2 XX analysis
+will test whether the induction/execution distinction seen in XY space is also present in
+the XX co-expression relationships.
+
+Runs launched:
+- `output/NMT1_full/xx_c34/` -- 170 genes (C3+C4 combined), ~14,535 pairs, Tier 2 only
+- `output/NMT1_full/xx_c1/` -- 94 genes (C1), ~4,371 pairs, Tier 2 only
+
+Command pattern:
+```
+uv run dkg --mode xx \
+    --x-matrix  output/NMT1_full/xx_c34/matrix.feather \
+    --output-dir output/NMT1_full/xx_c34 \
+    --skip-tier3 \
+    --tier1-threshold 0.2
+```
+
+New CLI flag `--skip-tier3` added to `src/dkg/cli.py`, `src/dkg/config.py`,
+`src/dkg/modes/xx.py` to enable Tier 2-only XX runs without bootstrap overhead.
+
+---
+
+## XX Shape-Based Community Detection on XY Biomarker Communities (2026-06-01)
+
+### Motivation
+
+The Tier 2 XX runs on C3+C4 and C1 produced per-pair distributional shape metrics.
+The Pearson-based Louvain communities (4 for C3+C4, 2 for C1) are built from linear
+correlation structure only. The question: does the shape space (Tier 2 metrics) reveal
+sub-structure within and across these gene sets that Pearson misses?
+
+### Method: per-gene shape profile aggregation
+
+Script: `scripts/xx_shape_communities.py`
+
+For each gene, average its 66 Tier 2 shape metrics across all pairs it participates in
+(appearing as either x_col or y_col). This gives a per-gene "relational shape profile" --
+how this gene co-expresses with its neighbours *distributionally*, not just linearly.
+Then: StandardScaler normalize, cosine similarity matrix, graph at sim >= 0.5, Louvain.
+
+This is the direct XX analogue of the XY biomarker community analysis (same cosine+Louvain
+pipeline applied to XY shape vectors in `nmt1_biomarker_communities.py`).
+
+Key difference from XY: in XY each row is already a per-gene profile (gene vs NMT1).
+In XX each row is a gene-pair profile, so aggregation is required first.
+
+### C3+C4 shape communities (169 genes, 14,196 pairs)
+
+6 communities, modularity=0.52:
+
+| Comm | n | Wasserstein | IQR ratio | p7_delta_aic | Top genes |
+|---|---|---|---|---|---|
+| 2 | 59 | 1.86 | 1.22 | 5.4 | VIM, LOXL2, AXL, IKBIP, SYDE1 |
+| 5 | 55 | 1.09 | 1.06 | 4.1 | C11orf68, UROD, PDLIM2, PRXL2C |
+| 0 | 33 | 1.48 | 0.98 | 6.5 | CAVIN1, MXRA7, CNN3, SHISA4 |
+| 1 | 18 | 1.57 | **2.99** | 6.1 | **NMT2**, TICAM2, CSF1, TMEM158 |
+| 3 | 3  | 1.40 | 1.68 | 6.3 | SCN1B, CPQ, KLHL4 |
+
+**Key finding (C3+C4 alone):** NMT2 lands in the high-IQR-ratio cluster (Comm 1,
+IQR ratio=2.99). Its co-expression relationships within the mesenchymal module are
+strongly variance-modulating -- the variance of NMT2's co-expressed partners expands
+dramatically at high NMT2 expression. This is qualitatively different from the rest of
+the mesenchymal module (which is shift-dominated, not variance-dominated). NMT2's shape
+is distinctive even within its own co-expression community.
+
+### C1+C3+C4 combined shape communities (262 genes, 18,474 pairs)
+
+5 communities, modularity=0.52. (Note: only within-community pairs available -- no
+C1 vs C3+C4 cross-community pairs were computed.)
+
+| Comm | n | Wasserstein | IQR ratio | p7_delta_aic | Character | Top genes |
+|---|---|---|---|---|---|---|
+| 0 | 92 | 0.95 | 1.07 | 3.5 | Weak shift, linear | DYRK3, GRK2, C11orf68, TET3 |
+| 1 | 79 | 1.59 | 1.02 | 5.9 | Moderate shift | RUSC2, IKBIP, ARRDC1, ITGA5, TRPC1 |
+| 2 | 63 | **1.96** | 1.47 | **8.0** | Strong shift + threshold | LLGL2, OVOL2, CAMSAP3, ARHGEF16 |
+| 3 | 26 | 1.53 | **2.49** | 5.7 | Variance-modulating | **NMT2**, HSD11B2, CSF1, TMEM158 |
+| 4 | 2  | — | — | — | Singleton pair | — |
+
+**Key findings (combined):**
+
+1. **Comm 2 is dominated by XY-C1 epithelial genes** (LLGL2, OVOL2, CAMSAP3, ARHGEF16
+   are all luminal/epithelial polarity markers from the XY presence-biomarker community).
+   This community has the highest wasserstein (1.96) AND highest threshold structure
+   (p7_delta_aic=8.0) of any shape cluster. The C1 epithelial genes don't just have
+   distinctive XY shapes -- they have the strongest distributional shift signature in
+   their XX co-expression relationships too.
+
+2. **NMT2 stays isolated in the variance-modulating cluster (Comm 3)** even when C1
+   genes are added. IQR ratio drops from 2.99 to 2.49 (other variance-modulators join)
+   but NMT2 remains in this cluster. The high-variance-modulation relational shape is
+   a robust, stable property of NMT2 -- not an artifact of the C3+C4 gene set.
+
+3. **The weak-shift linear cluster (Comm 0, n=92)** absorbs most of the metabolic/
+   signaling genes from both C1 (DYRK3, GRK2, TET3) and C3+C4 (C11orf68, PDLIM2).
+   These genes are co-expressed in a linear, low-shift way -- suggesting their
+   co-regulation is constitutive rather than state-dependent.
+
+### Interpretation
+
+The shape-based clustering reveals a hierarchy within the mesenchymal/luminal program:
+
+- **Constitutive co-expression (Comm 0):** metabolic and signaling genes co-expressed
+  linearly regardless of cell state. Background co-regulation.
+- **Shift-dominated (Comms 1+2):** distributional shift between high/low expression
+  regimes. The epithelial genes (C1) have the strongest shift -- their co-expression
+  is most state-dependent.
+- **Variance-modulating (Comm 3):** NMT2, CSF1, TMEM158. Co-expression relationships
+  that expand in variance at high expression -- consistent with NMT2 being a gating
+  node: when NMT2 is high, its co-expressors become more variable (heterogeneous
+  downstream response). When NMT2 is low, the co-expression is tight.
+
+This is consistent with NMT2's role as a paralog-loss vulnerability gating node
+rather than a constitutive co-regulatory partner.
+
+### Outputs
+
+- `output/NMT1_full/xx_c34/shape_communities.parquet` -- C3+C4 per-gene shape profiles + community
+- `output/NMT1_full/xx_c1_c34_combined/shape_communities.parquet` -- combined
+- `output/NMT1_full/xx_c34/tier2_deep.parquet` -- 14,196 pairs, all thresholds (r>=0)
+- `output/NMT1_full/xx_c1/tier2_deep.parquet` -- 4,278 pairs, all thresholds (r>=0)
+
+---
+
+## XX Pair-Level Shape Communities on C3+C4 (2026-06-01)
+
+### Method
+
+Same cosine+Louvain pipeline as gene-level shape communities, but each *pair* is a node
+with its own 66D shape vector rather than a per-gene aggregate. Answers: which gene-gene
+relationships look alike distributionally?
+
+Computational approach: float32 dot product (X_norm @ X_norm.T) to keep the 14,196×14,196
+similarity matrix at 0.81 GB rather than 1.6 GB. Graph built by vectorized numpy threshold.
+
+Run:
+```
+uv run python scripts/xx_shape_communities.py \
+    --tier2 output/NMT1_full/xx_c34/tier2_deep.parquet \
+    --output-dir output/NMT1_full/xx_c34 \
+    --mode pairs
+```
+
+Output: `output/NMT1_full/xx_c34/shape_communities_pairs.parquet`
+
+### Results
+
+9 communities on 14,196 pairs, modularity=0.53, graph density=0.065 (6.5M edges):
+
+| Comm | n | Wasserstein | IQR ratio | delta_aic | Character | Example pairs |
+|---|---|---|---|---|---|---|
+| 1 | 1,813 | **2.63** | 1.01 | 5.9 | Strong shift, high |r| | COL6A1×COL6A2, VIM×EMP3, VIM×SYDE1 |
+| 5 | 2,183 | 1.66 | **3.81** | 5.5 | Variance-modulating | STX2×ZEB1, LOX×PTX3, VIM×CNTNAP1 |
+| 4 | 1,188 | 1.40 | 0.86 | **16.0** | Threshold-driven | ZEB1×LIX1L, ZEB1×IKBIP, SYDE1×STX2 |
+| 0 | 2,856 | 1.91 | 0.70 | 4.8 | Shift + moderate |r| | DRAP1×C11orf68, SYDE1×IKBIP, VIM×LIX1L |
+| 8 | 2,524 | 1.04 | 0.81 | 2.8 | Weak shift | CYB5R3×RSU1, FHL1×NMT2 |
+| 2 | 3,369 | 0.85 | 0.95 | 3.2 | Background/noisy | MRC2×RSU1, ZEB1×CRTAP |
+
+### Key finding: VIM and ZEB1 are structurally heterogeneous hubs
+
+VIM and ZEB1 appear in at least three different shape clusters depending on their partner:
+- **Comm 1 (strong shift):** VIM×EMP3, VIM×SYDE1 — partners continuously co-vary with VIM
+- **Comm 5 (variance-modulating):** VIM×CNTNAP1, ZEB1×STX2 — partners become more
+  variable at high VIM/ZEB1 expression
+- **Comm 4 (threshold-driven):** ZEB1×LIX1L, ZEB1×IKBIP — partners only engage past
+  a specific ZEB1 threshold
+
+This is invisible in the gene-level aggregate. The per-gene average for VIM and ZEB1
+landed them in "moderate shift" — a summary that mixes three qualitatively distinct
+regulatory logics into one number.
+
+### Interpretation: what this changes vs. gene-level aggregate
+
+**Gene-level:** VIM and ZEB1 are shift-dominated nodes. Their co-expression relationships
+are state-dependent but homogeneous in character.
+
+**Pair-level:** VIM and ZEB1 are structurally heterogeneous hubs with partner-specific
+regulatory logic:
+- Continuously co-varying partners (shift) = dragged along as part of the same program
+- Variance-modulating partners = cell-to-cell heterogeneity emerges specifically in the
+  high-VIM/ZEB1 mesenchymal state; these genes are not uniformly activated, they become
+  noisy
+- Threshold-driven partners (IKBIP, LIX1L) = genes that only engage once ZEB1 crosses
+  an EMT commitment threshold; a qualitatively different regulatory logic suggesting
+  a gating relationship rather than co-regulation
+
+The threshold-driven ZEB1 partners are the most actionable: IKBIP and LIX1L may represent
+downstream targets that only activate after EMT commitment, making them candidates for
+state-specific dependencies rather than continuous biomarkers.
+
+### Comparison to gene-level findings
+
+Broad conclusions confirmed:
+- Same 3-4 shape archetypes (shift, variance-modulating, threshold-driven, background)
+- NMT2 appears in Comm 8 (FHL1×NMT2) in the weak-shift background — consistent with
+  NMT2's pairs being individually moderate even though its per-gene IQR ratio was high
+  (the variance-modulation in NMT2 is spread across many pairs, diluted at the pair level)
+- The strong-shift cluster (Comm 1) contains the highest-|r| pairs — co-expression
+  strength and shift magnitude are correlated
+
+New information from pair-level:
+- Hub gene heterogeneity (VIM, ZEB1 span multiple clusters)
+- Specific high-value pairs: ZEB1×IKBIP, ZEB1×LIX1L as threshold-driven candidates
+- The threshold-driven cluster (delta_aic=16.0) is a distinct structural class not
+  visible in gene averages
+
+---
+
+## Patient Selection Strategy for NMT1 Inhibition (2026-06-01)
+
+### Framework
+
+Two independent selection axes identified from XY community + Enrichr + shape analysis:
+
+**Axis 1 — Absence biomarker (mesenchymal/NMT2-low):**
+- Marker: NMT2-low + mesenchymal module score (VIM, ZEB1, LGALS1, FGFR1, SPARC)
+- Logic: NMT2-low = paralog loss → synthetic lethality with NMT1 inhibition
+- High expression = resistant; low = vulnerable
+- Enrichr: EMT adj_p=9.1e-12 (C4), adj_p=1.7e-8 (C3)
+
+**Axis 2 — Presence biomarker (luminal/L2HGDH-high):**
+- Marker: L2HGDH-high + luminal score (OVOL2, LLGL2, CAMSAP3, DICER1)
+- Logic: differentiated/oxidative-metabolism state independently predicts sensitivity
+- Enrichr: Estrogen Response Late adj_p=6.4e-2
+- Orthogonality confirmed by conditional analysis and separate Enrichr pathway hits
+
+**Joint selection criterion:** (NMT2-low AND mesenchymal score high) OR luminal score high
+Captures more patients than either axis alone without conflating the two mechanisms.
+
+### Why a module score, not a single gene
+
+XX community 10 (4,225 genes) is the unified mesenchymal co-expression module. NMT2
+expression is variance-modulating within this state — noisy at the individual-gene level.
+A first-PC or sum score across community 10 top genes averages over that noise and is a
+more stable biomarker than NMT2 alone.
+
+### EMT commitment threshold as a refinement criterion
+
+The pair-level shape analysis identified ZEB1×IKBIP and ZEB1×LIX1L as threshold-driven
+pairs (delta_aic=16.0, highest in the dataset). These genes only engage past a specific
+ZEB1 expression threshold — an EMT commitment point. A composite score including ZEB1
+plus its threshold-engaged partners (IKBIP, LIX1L) should define the most deeply
+sensitive patient subgroup more precisely than ZEB1 alone. These are the patients past
+the EMT commitment threshold, not just the mesenchymal continuum.
+
+### Heterogeneity guard for bulk biopsies
+
+NMT2 is variance-modulating (high IQR ratio, gene-level shape community). Even within
+a nominally NMT2-low mesenchymal tumor, bulk RNA averages over subpopulations with
+different NMT2 levels. A patient can look NMT2-low in bulk but carry an escape-prone
+moderate-NMT2 subpopulation already present before treatment.
+
+Implications:
+- Set the NMT2 selection threshold conservatively (deep low, not just below median)
+- Where single-cell or spatial data is available, confirm NMT2-low subpopulation is
+  dominant (>70-80% of tumor cells) before enrolling
+- Bimodal NMT2 in single-cell = escape risk despite bulk criteria passing
+
+### Four-step clinical translation roadmap
+
+**Step 1 — Cancer type prioritization**
+Run NMT2-low prevalence per TCGA cohort (cBioPortal). EMT/PI3K-Akt enrichment points
+toward TNBC, bladder, head and neck, mesenchymal GBM, sarcomas. Select indication with
+highest NMT2-low prevalence + unmet need.
+
+**Step 2 — Composite biomarker score**
+Three-component score:
+- NMT2 expression (low = toward selection)
+- Mesenchymal module score (XX comm 10: VIM, ZEB1, LGALS1, FGFR1, SPARC, LOXL2)
+- L2HGDH/luminal score (OVOL2, LLGL2, CAMSAP3) as orthogonal rescue arm
+
+**Step 3 — Threshold calibration from patient data**
+The ZEB1 commitment threshold was identified in cell lines. Apply the same Tier 2
+analysis (piecewise OLS, p7_threshold_quantile) to TCGA RNA-seq data for the
+ZEB1×IKBIP and ZEB1×LIX1L pairs to read off where the threshold falls in patient
+tumor distributions. This calibrates the cell-line finding to a clinically measurable
+cut-point.
+
+**Step 4 — Heterogeneity guard**
+For indications where single-cell atlas data exists, characterize NMT2 variance within
+mesenchymal tumors. Flag bimodal NMT2 distributions as escape-risk. Use spatial
+transcriptomics to confirm NMT2-low dominance if available.
+
+### What is still missing
+
+- TCGA NMT2-low prevalence per cancer type (cBioPortal, ~1 day of work)
+- IHC feasibility of NMT2 (FFPE compatibility, antibody availability)
+- Patient-level threshold calibration (cell-line thresholds may not transfer directly)
+- Functional validation that IKBIP and LIX1L are downstream of NMT1 activity (not just
+  co-expressed with the vulnerability state) — this determines whether they are
+  biomarkers or mechanistic effectors
+- A retrospective cohort with NMT1 inhibitor or NMT1 KO response data to validate
+  the composite score prospectively
+
+---
+
+## TCGA NMT2-low Prevalence + VIM/ZEB1 Cross-Reference (2026-06-01)
+
+### Method
+
+Script: `scripts/tcga_marker_prevalence.py` (reusable for any target)
+
+Fetches pan-cancer z-score expression from cBioPortal public API across all 30 TCGA
+PanCancer Atlas 2018 cohorts. Computes per-cohort:
+- % samples with z < -0.5 ("low")
+- % samples with z > +0.5 ("high")
+- median z-score
+
+API endpoint: POST `/molecular-profiles/{pid}/molecular-data/fetch`
+Profile used: `{studyId}_rna_seq_v2_mrna_median_all_sample_Zscores` (pan-cancer z-scores)
+No authentication required. Rate-limited to 0.15s between calls.
+
+To rerun for any target:
+```
+python scripts/tcga_marker_prevalence.py \
+    --genes NMT2:10891 VIM:7431 ZEB1:6935 \
+    --primary NMT2 --primary-direction low \
+    --output output/nmt2_vim_zeb1_tcga.json
+```
+
+Outputs: `output/nmt2_tcga_prevalence.json`, `output/nmt2_vim_zeb1_tcga.json`
+
+### NMT2-low prevalence ranked (z < -0.5)
+
+| Cancer type | NMT2-low | VIM med_z | ZEB1 med_z | n |
+|---|---|---|---|---|
+| Acute Myeloid Leukemia | **47.4%** | +0.146 | +0.161 | 173 |
+| Cervical SCC | 38.8% | -0.016 | -0.004 | 294 |
+| Uveal Melanoma | 38.8% | +0.055 | -0.004 | 80 |
+| Ovarian | 37.7% | +0.006 | -0.066 | 300 |
+| DLBCL | 37.5% | +0.306 | -0.076 | 48 |
+| HNSC | 36.5% | +0.010 | -0.034 | 515 |
+| Adrenocortical | 35.9% | +0.232 | +0.141 | 78 |
+| Lung SCC | 35.7% | +0.044 | +0.088 | 484 |
+| Lung ADC | 33.9% | +0.041 | +0.037 | 510 |
+| Breast | 30.3% | +0.064 | +0.150 | 1082 |
+| Kidney clear cell | 19.4% | +0.126 | +0.126 | 510 |
+| Kidney papillary | 15.2% | +0.102 | -0.015 | 283 |
+| Kidney chromophobe | 12.3% | -0.176 | -0.022 | 65 |
+
+### Cross-reference interpretation
+
+**AML (47.4% NMT2-low) is an outlier — mechanism mismatch.**
+VIM med_z=+0.15, ZEB1 med_z=+0.16 are both positive — AML is not a mesenchymal cancer.
+NMT2-low in AML likely reflects hematopoietic lineage biology rather than EMT/paralog-loss
+vulnerability. Cannot assume the same NMT1 dependency mechanism applies. Would need
+independent functional validation in AML cell lines before pursuing this indication.
+
+**Cervical SCC, HNSC, Lung SCC: NMT2-low without mesenchymal signal.**
+VIM and ZEB1 median z-scores near zero despite high NMT2-low prevalence. These are
+squamous cancers where NMT2 suppression may be a squamous differentiation feature
+rather than an EMT-driven paralog-loss event. The biomarker is present but the
+mechanism may differ from the mesenchymal model.
+
+**DLBCL: NMT2-low + VIM elevated (med_z=+0.31).**
+VIM is expressed in B-cells constitutively — not a reliable mesenchymal marker here.
+Small cohort (n=48). Low confidence.
+
+**Adrenocortical Carcinoma: NMT2-low + VIM high (med_z=+0.23) + ZEB1 high (+0.14).**
+Small cohort (n=78) but the co-occurrence pattern matches the mesenchymal model most
+closely among the top-ranking cohorts. Worth investigating further.
+
+**Breast (30.3%, n=1,082): best powered cohort with plausible mechanism.**
+VIM med_z=+0.06, ZEB1 med_z=+0.15. Moderate mesenchymal signal at the cohort median
+level, but TNBC subtype (which drives EMT) would show much stronger signal when
+stratified. Large cohort powers a biomarker-stratified analysis.
+
+**Kidney cancers rank at the bottom (12-19%) — as expected.**
+Kidney clear cell and papillary have high NMT2 expression (NMT2 high, not low).
+Consistent with epithelial phenotype prediction.
+
+### Prioritized indications for NMT1 inhibitor development
+
+> **⚠ SUPERSEDED** — see revised priority list below after BRCA PAM50 subtype
+> stratification. TNBC is de-prioritized; Luminal B is the primary BRCA indication.
+
+Based on NMT2-low prevalence + mechanistic plausibility (EMT/mesenchymal co-occurrence):
+
+1. ~~**Breast (TNBC subtype):**~~ **REVISED** — TNBC has only 20.4% NMT2-low and is
+   actually NMT2-HIGH (48%). See PAM50 stratification section. Luminal B (56% NMT2-low)
+   replaces TNBC as the primary BRCA target subtype.
+2. **HNSC:** large cohort (n=515), 36.5% NMT2-low, squamous with known EMT subtype.
+   Mechanism needs validation but sample size enables stratified analysis.
+3. **Ovarian:** high unmet need, 37.7% NMT2-low, n=300.
+4. **Adrenocortical:** best mechanistic fit in top tier (VIM+ZEB1 both elevated), n=78.
+5. **Lung SCC/ADC:** large cohorts, 34-36% NMT2-low, lung cancer unmet need is high.
+
+**AML excluded from priority list** despite highest prevalence — mechanism mismatch
+until functional data in hematopoietic cell lines confirms NMT1 dependency.
+
+### Next step: BRCA subtype stratification
+
+The 30.3% bulk BRCA figure masks massive subtype heterogeneity. Repeat the analysis
+restricted to TNBC (ER-/PR-/HER2-) samples — expected NMT2-low prevalence 50-70%
+based on the mesenchymal enrichment in TNBC. This is the single highest-value
+follow-on analysis.
+
+```
+# Requires sample-level subtype annotation from cBioPortal clinical data
+# Filter to ER_STATUS=Negative AND PR_STATUS=Negative AND HER2_STATUS=Negative
+# Then recompute NMT2-low prevalence on the filtered sample set
+```
+
+---
+
+## BRCA PAM50 Subtype Stratification — NMT2, NMT1, VIM, ZEB1
+
+**Date:** 2026-05-31  
+**Data source:** PAM50_SUBTYPE from `brca_tcga_pub` (n=522) cross-referenced with  
+RNA-seq z-scores from `brca_tcga_pan_can_atlas_2018_rna_seq_v2_mrna_median_all_sample_Zscores`.  
+Matched 517 samples. Threshold = ±0.5 z-score.
+
+### NMT2 by PAM50 subtype
+
+| Subtype       |   N | NMT2-low% | NMT2-high% | NMT2 med_z |
+|---------------|-----|-----------|------------|------------|
+| Basal-like    |  98 |     20.4% |      48.0% |      +0.43 |
+| HER2-enriched |  57 |     24.6% |      33.3% |      +0.03 |
+| Luminal A     | 229 |     27.5% |      21.4% |      -0.07 |
+| Luminal B     | 125 |     56.0% |       8.0% |      -0.68 |
+| Normal-like   |   8 |     37.5% |      25.0% |      +0.05 |
+
+### VIM and ZEB1 by PAM50 subtype
+
+| Subtype       | VIM-low% | VIM-high% | VIM med_z | ZEB1-low% | ZEB1-high% | ZEB1 med_z |
+|---------------|----------|-----------|-----------|-----------|------------|------------|
+| Basal-like    |    20.4% |     52.0% |     +0.58 |     57.1% |       9.2% |      -0.75 |
+| HER2-enriched |    31.6% |     15.8% |     -0.06 |     24.6% |      36.8% |      +0.20 |
+| Luminal A     |    24.9% |     29.3% |     +0.12 |     14.0% |      49.3% |      +0.49 |
+| Luminal B     |    56.8% |     11.2% |     -0.63 |     32.8% |      20.8% |      -0.05 |
+| Normal-like   |     0.0% |     62.5% |     +0.62 |     25.0% |      37.5% |      +0.07 |
+
+### NMT1 expression by PAM50 subtype
+
+| Subtype       | NMT1-low% | NMT1-high% | NMT1 med_z |
+|---------------|-----------|------------|------------|
+| Basal-like    |     37.8% |      27.6% |      -0.26 |
+| HER2-enriched |     63.2% |      14.0% |      -0.76 |
+| Luminal A     |     18.3% |      30.6% |      +0.11 |
+| Luminal B     |     29.6% |      44.0% |      +0.30 |
+| Normal-like   |     25.0% |      37.5% |      +0.37 |
+
+### Key findings (strategic impact: major revision)
+
+**Luminal B, not TNBC/Basal-like, is the highest-NMT2-low subtype (56%).**
+
+Prior hypothesis was that TNBC/Basal-like — the most mesenchymal subtype — would
+dominate the NMT2-low signal. This is WRONG. Basal-like has only 20.4% NMT2-low, and
+is actually the most NMT2-HIGH subtype (48% NMT2-high, median z = +0.43).
+
+**TNBC co-expression pattern: NMT2-HIGH + VIM-HIGH + ZEB1-LOW.**
+Basal-like tumors have high NMT2 (48%) AND high VIM (52%) but PARADOXICALLY low ZEB1
+(57% ZEB1-low). This is consistent with a VIM+ mesenchymal state that does not require
+ZEB1-driven transcriptional EMT — possibly a constitutive basal/myoepithelial program
+where NMT2 is upregulated (not the paralog-loss context we were looking for).
+
+**The AML finding was a preview of this pattern, not an anomaly.**
+Both AML and TNBC show high NMT2 in contexts with elevated vimentin. The mesenchymal
+co-occurrence of high NMT2 + VIM suggests NMT2 may be functionally required (not lost)
+in mesenchymal/basal contexts — the opposite of the NMT2-loss synthetic lethality model.
+
+**Luminal B is the most compelling patient selection subtype:**
+- 56% NMT2-low (highest) → no paralog backup → NMT1 essential
+- 44% NMT1-high expression → high NMT1 dependency likely
+- VIM-low (56.8%) → non-mesenchymal, consistent with luminal phenotype
+- High proliferation (Ki67+ defining feature of LumB)
+- Unmet need: post-CDK4/6i resistance is a major clinical problem
+
+**ZEB1 as a stratification marker in BRCA needs reconsideration.**
+Luminal A has the highest ZEB1-high rate (49.3%), which is counterintuitive — Luminal A
+is the least mesenchymal subtype. ZEB1 in luminal context may be functioning as a
+transcriptional repressor for luminal differentiation maintenance, distinct from its
+EMT-driver role in other cancers. Do not use ZEB1-low as a TNBC proxy in BRCA.
+
+### Revised patient selection strategy for BRCA
+
+**Primary:** Luminal B with NMT2-low (IHC or RNA)
+- ~56% of Luminal B qualify → ~56 × 0.25 × BRCA incidence = large addressable population
+- Aligns with CDK4/6i-resistant disease setting (high unmet need)
+- Biomarker: NMT2 IHC or RNA z-score < -0.5
+
+**Secondary (exploratory):** Pan-BRCA NMT2-low regardless of PAM50 subtype
+- 30.3% of all BRCA → sufficient for biomarker-stratified study
+- Less mechanistically clean than Luminal B first
+
+**De-prioritize:** TNBC/Basal-like as primary indication for NMT2-low strategy
+- Only 20.4% NMT2-low — insufficient enrichment
+- Mechanistic conflict: NMT2 appears upregulated in the basal/mesenchymal program
+- TNBC still possible if L2HGDH-high (luminal C1 community) biomarker applies there
+
+### Updated indication priority list
+
+1. **Luminal B BRCA** (NMT2-low, 56%): mechanistically clean, high unmet need (CDK4/6i resistance)
+2. **HNSC** (36.5% NMT2-low, n=515): large cohort, squamous — mechanism needs validation
+3. **Ovarian** (37.7% NMT2-low, n=300): high unmet need, mechanism open
+4. **Lung SCC/ADC** (34-36% NMT2-low): large cohorts, unmet need
+5. **Adrenocortical** (best EMT mechanistic fit in pan-cancer, n=78): small but clean signal
+
+### Methodological note
+
+The brca_tcga_pub microarray (`mrna_median_all_sample_Zscores`) was unusable for NMT2:
+most values floored at z = -0.217 (detection limit), confirming the need for RNA-seq.
+Cross-cohort matching (PAM50 from brca_tcga_pub × RNA-seq from PanCan Atlas) yielded
+517/522 matched samples — sufficient for subtype stratification.
+
+
+---
+
+## YY' Co-dependency Analysis — NMT1 vs All CRISPR Dependencies
+
+**Date:** 2026-06-01  
+**Data:** `data/processed/chronos_filtered.feather` — 276 cell lines (CRISPR-expression
+intersection), 11,744 dependency genes as predictors.  
+**Mode:** `--mode target` with chronos as both X and Y matrix; `--skip-tier3`.  
+**Note:** n=276 is underpowered relative to the full 26Q1 dataset (~1,538 cell lines).
+Signal directions are reliable; effect sizes will sharpen on rerun with full matrix.
+
+### Top co-essential dependencies (positively correlated with NMT1)
+
+| Gene(s)          |   r  | wass | d_aic | Interpretation |
+|------------------|------|------|-------|----------------|
+| NMT1_NMT2        | +0.60| +0.84| 13.4  | Paralog pair — NMT2-low cells also show NMT1 essentiality; confirms synthetic lethality axis in dependency space. d_aic=13.4 suggests threshold/non-linear structure. |
+| MYBL2            | +0.45| +0.55|  2.7  | Proliferation TF; co-essential in high-cycling contexts |
+| MYB_MYBL2        | +0.42| +0.57|  0.7  | MYB family co-essentiality |
+| KLF5             | +0.36| +0.58| 11.4  | Luminal breast cancer master TF — see note below |
+| KLF5 paralogs    | +0.32–0.36 | — | — | KLF1/2/4/7/8/12/15 all in top 20; KLF family cluster dominates |
+| MFN2             | +0.32| +0.50| 10.5  | Mitochondrial fusion; d_aic=10.5 suggests threshold structure |
+| IQGAP1/IQGAP3    | +0.35| +0.41|  8.9  | Scaffold proteins, cytoskeletal organization |
+| ARF5/ARF6/ARL8B  | +0.33| +0.47|  7.3  | ARF GTPases, vesicle trafficking / myristoylation-dependent |
+
+### KLF5 co-essentiality — convergent evidence for Luminal B
+
+KLF5 is a well-validated luminal breast cancer dependency (essential in ER+ luminal
+cell lines, dispensable in basal/TNBC). Its co-essentiality with NMT1 (r=+0.36) plus
+six additional KLF family paralogs all ranking in the top 20 is striking convergent
+evidence that:
+
+1. **NMT1 dependency is enriched in the luminal transcriptional state** — the same
+   cell lines where KLF5 is essential are also NMT1-essential. This is functionally
+   consistent with the TCGA finding that Luminal B has the highest NMT2-low prevalence
+   (56%) and therefore the highest paralog-loss background for NMT1 essentiality.
+
+2. **NMT1 and KLF5 are not the same dependency** — they co-vary across cell lines
+   but operate through different mechanisms. KLF5 drives luminal identity; NMT1 provides
+   myristoylation capacity that luminal cells rely on when NMT2 is absent.
+
+3. **KLF5 inhibition status:** KLF5 is currently not directly druggable, but its
+   co-essentiality with NMT1 reinforces Luminal B as the indication and could inform
+   biomarker development (KLF5 expression as a luminal context marker alongside NMT2-low).
+
+### Top anti-correlated dependencies (sensitizer candidates)
+
+| Gene(s)          |   r  | wass | d_aic | Interpretation |
+|------------------|------|------|-------|----------------|
+| PTK2 (FAK)       | -0.43| -0.64|  5.3  | Top sensitizer candidate — FAK essential in mesenchymal/TNBC; NMT1 essential in luminal. FAK inhibition could convert mesenchymal cells to NMT1-dependent state. |
+| PTK2_SYK         | -0.44| -0.67|  8.0  | FAK+SYK pair; strongest anti-correlate including paralog context |
+| ITGB3/ITGB5      | -0.42| -0.56|  1.0  | Integrin signaling (FAK upstream); mesenchymal context |
+| PRKAR1A paralogs | -0.38–0.42 | — | — | PKA regulatory subunits; cAMP/PKA signaling |
+| ELMO1_ELMO2      | -0.40| -0.55|  3.5  | Rac1 GEF complex; cytoskeletal/mesenchymal |
+| WWTR1_YAP1       | -0.39| -0.58|  2.7  | Hippo effectors — mechanosensing/mesenchymal master regulators |
+| CDH2 pairs       | -0.36–0.37 | — | — | N-cadherin (EMT marker); multiple paralog pairs |
+| NFKB1/RELA/RELB  | -0.35–0.37 | — | — | NF-κB inflammatory signaling; mesenchymal/basal contexts |
+| LPAR1/S1PR1/S1PR2| -0.35–0.36 | — | — | Lipid GPCR signaling; d_aic up to 9.6 |
+| PKN1/PKN2/PRKCZ  | -0.35–0.36 | — | — | PKC family; stress/cytoskeletal signaling |
+
+### The anti-correlated cluster is mechanistically coherent
+
+FAK → YAP/TAZ → N-cadherin → NF-κB is the mesenchymal/EMT dependency program.
+Cell lines running on this program do not require NMT1. This is the functional
+complement of the TCGA finding (NMT2-HIGH + VIM-HIGH in TNBC/Basal-like) — now
+confirmed in the dependency space. The same mesenchymal biology that drives NMT2
+upregulation also drives FAK/YAP/N-cadherin essentiality and NMT1 non-essentiality.
+
+### FAK as the primary sensitizer lead
+
+PTK2 (FAK) is druggable — multiple FAK inhibitors exist (defactinib, VS-6063,
+GSK2256098). The combination rationale:
+
+- FAK inhibitor → suppresses mesenchymal survival program → shifts cells toward
+  luminal-like dependency profile → NMT1 becomes essential
+- Then NMT1 inhibitor → synthetic lethality in the sensitized population
+- Predicted to expand the NMT1-sensitive patient population beyond the NMT2-low subset
+- TNBC (currently de-prioritized due to 20% NMT2-low) could re-enter scope as a
+  combination indication: FAK inhibitor pre-sensitization + NMT1 inhibitor
+
+### Caveats
+
+- n=276 cell lines (intersection subset). Full 26Q1 dataset has 1,538 cell lines.
+  Effect sizes will change; anti-correlation direction expected to hold.
+- Paralog pair columns (e.g. `NMT1_NMT2`, `PTK2_SYK`) represent combined knockouts
+  in the DepMap CRISPR screen, not individual gene scores.
+- NMT1 self-correlation (r=1.0) excluded from analysis.
+
+### Next step
+
+Rerun on full `CRISPR_26Q1.feather` (1,538 × 18,532) after stripping `..ENTREZ.`
+column name suffixes. Expected to sharpen anti-correlate rankings and enable
+robust tier2 shape analysis on the FAK and KLF5 pairs specifically.
+
+
+---
+
+## YY' Full Dataset Results — NMT1 Co-dependency (n=1,538 cell lines)
+
+**Date:** 2026-06-01  
+**Data:** `data/processed/chronos_26Q1_full.feather` — 1,538 cell lines, 18,531 dependency
+genes. Preprocessed from `CRISPR_26Q1.feather` by stripping `..ENTREZ.` column suffixes.  
+**Filter:** p3_n >= 200 and tier2 complete → 18,434 pairs retained.
+
+### Top co-essential dependencies (n=1,538)
+
+| Rank | Gene    |   r   | wass  | d_aic | Note |
+|------|---------|-------|-------|-------|------|
+| #1   | SAP30BP | +0.256| +0.305|   9.6 | Transcriptional repressor / HDAC complex |
+| #2   | TAOK1   | +0.254| +0.260|   0.6 | Stress-activated kinase |
+| #3   | ROMO1   | +0.229| +0.229|   3.6 | Mitochondrial ROS modulator |
+| #4   | ADSL    | +0.222| +0.267|   2.1 | De novo purine synthesis |
+| #5   | SETDB1  | +0.218| +0.266|   8.6 | H3K9me3 methyltransferase, chromatin silencing |
+| #6   | ZBTB11  | +0.217| +0.252|   7.4 | Zinc finger TF |
+| #8   | STX4    | +0.214| +0.208|  13.6 | Syntaxin-4, vesicle trafficking |
+| #10  | CYRIB   | +0.213| +0.256|  19.3 | Rac1 inhibitor / cytoskeletal regulation |
+| #11  | COPS6   | +0.212| +0.258|  11.8 | COP9 signalosome, protein neddylation |
+| #12  | MYBL2   | +0.210| +0.259|   5.5 | Proliferation TF (consistent with n=276 run) |
+| #19  | ACTR3C  | +0.199| +0.186|  21.0 | Arp2/3 complex; highest d_aic in positive list |
+| #17  | PSMB6   | +0.202| +0.238|  18.1 | Proteasome subunit |
+| #54  | KLF5    | +0.176| +0.165|   4.0 | Luminal breast TF — confirmed, not a small-n artifact |
+
+**KLF5 confirmation:** Ranks #54 of 18,434 at n=1,538. Effect size attenuates vs the
+276-cell run (r: 0.36→0.18) as expected with more diverse cell lines, but the signal
+holds. KLF5 co-essentiality with NMT1 is real and reproducible.
+
+### Top anti-correlated dependencies — sensitizer candidates (n=1,538)
+
+| Rank    | Gene   |    r   | wass  | d_aic | Note |
+|---------|--------|--------|-------|-------|------|
+| #18,434 | JUN    | -0.256 | -0.295|  13.3 | AP-1 TF — #1 anti-correlate; mesenchymal transcriptional output |
+| #18,430 | TEAD1  | -0.242 | -0.262|  -1.5 | Hippo effector TF (YAP/TAZ partner) |
+| #18,421 | WWTR1  | -0.223 | -0.227|  -0.3 | TAZ (YAP paralog); Hippo pathway |
+| #18,420 | RAC1   | -0.223 | -0.267|   3.6 | Rho GTPase; cytoskeletal/mesenchymal |
+| #18,419 | FERMT2 | -0.223 | -0.253|   0.6 | Kindlin-2; focal adhesion |
+| #18,416 | VCL    | -0.216 | -0.219|  10.6 | Vinculin; focal adhesion scaffold |
+| #18,354 | PTK2   | -0.186 | -0.198|  15.7 | FAK — focal adhesion kinase; d_aic=15.7 suggests threshold |
+| #18,282 | ITGAV  | -0.235 | -0.231|   9.6 | Integrin αV (FAK upstream) |
+| ~bottom | ELMO2  | -0.234 | -0.220|   5.9 | Rac1 GEF (ELMO/DOCK complex) |
+| ~bottom | ABCE1  | -0.235 | -0.315|  33.5 | Ribosome recycling; highest d_aic overall |
+| ~bottom | POLR1B | -0.226 | -0.278|  29.3 | RNA Pol I; ribosome biogenesis |
+
+**NMT2 in dependency space:** Ranks #15,154 (r=-0.06). Weakly anti-correlated —
+NMT2 CRISPR essentiality does not cleanly mirror NMT2 expression loss. The NMT2-low
+biomarker should remain expression-based, not dependency-based.
+
+**YAP1:** r=-0.025 (rank #11,562) — near zero. The YAP1 CRISPR score is not
+anti-correlated with NMT1, but its TF partners TEAD1 and TAZ (WWTR1) are. YAP1
+may be dispensable in isolation but required through its TEAD1/TAZ complex.
+
+### Anti-correlated cluster interpretation
+
+JUN → TEAD1/WWTR1 → RAC1 → FERMT2/VCL → PTK2/ITGAV is the complete mesenchymal
+mechanosensing/AP-1 dependency axis. All components anti-correlate with NMT1 essentiality,
+confirmed at n=1,538. Same conclusion as n=276 run — the direction and biology are stable.
+
+### Notable high d_aic pairs (threshold structure)
+
+| Gene   | d_aic | Direction | Implication |
+|--------|-------|-----------|-------------|
+| ABCE1  |  33.5 | negative  | Threshold: ribosome recycling dependency gates NMT1 non-essentiality |
+| POLR1B |  29.3 | negative  | Threshold: RNA Pol I dependency anti-correlates with NMT1 |
+| ACTR3C |  21.0 | positive  | Threshold: Arp2/3 co-essentiality with NMT1 |
+| CYRIB  |  19.3 | positive  | Threshold: Rac1 inhibitor co-essentiality |
+| PTK2   |  15.7 | negative  | Threshold: FAK dependency gates NMT1 non-essentiality |
+| JUN    |  13.3 | negative  | Threshold: AP-1 dependency gates NMT1 non-essentiality |
+| STX4   |  13.6 | positive  | Threshold: vesicle trafficking co-essentiality |
+
+PTK2 and JUN high d_aic is particularly actionable — threshold structure means there is
+a natural cut point where cells flip from FAK/JUN-dependent to NMT1-dependent. See
+separate section on PTK2+JUN combination rationale.
+
+
+---
+
+## PTK2 (FAK) + JUN as NMT1 Sensitizer Combination
+
+**Date:** 2026-06-01  
+**Source:** YY' co-dependency analysis (n=1,538); PTK2 rank #18,354 (r=-0.186, d_aic=15.7),
+JUN rank #18,434 (r=-0.256, d_aic=13.3).
+
+### PTK2 and JUN are the same pathway at two levels
+
+They are not two independent hits. FAK sits at the membrane integrating ECM/integrin
+signals; JUN sits in the nucleus executing the transcriptional output. The anti-correlation
+with NMT1 runs through both ends of the same axis:
+
+```
+ECM / integrins
+     |
+  FAK (PTK2)  <-- focal adhesion scaffold (VCL, FERMT2)
+     |
+  RAC1 / RHO GTPases
+     |
+  YAP/TAZ --> TEAD1   (mechanosensing branch)
+  JNK/ERK --> JUN     (stress/AP-1 branch)
+     |
+mesenchymal transcriptional program
+```
+
+Cell lines dependent on this axis — mesenchymal, high ECM contact, mechanically stiff
+environments — do not require NMT1. Their survival is wired through FAK→JUN, not through
+the myristoylation-dependent trafficking that NMT1 supports in luminal cells.
+
+### Why the threshold structure (high d_aic) is clinically important
+
+d_aic=15.7 for PTK2 and 13.3 for JUN indicates a regime shift, not a smooth gradient.
+Below some FAK dependency threshold, cells are NMT1-essential; above it, they are not.
+Biologically, cells committed to the mesenchymal program have fundamentally rewired
+their trafficking and signaling dependencies — this is a switch, not a dial.
+
+Combination implication: a FAK inhibitor does not need to fully abolish FAK activity.
+It only needs to push cells below the threshold — shift them out of the FAK-dependent
+regime. That is a lower bar than full target engagement, which is favorable for
+clinical tolerability and dose selection.
+
+### Why JUN is the more interpretable endpoint
+
+JUN is induced by FAK through JNK, but also independently by inflammatory cytokines
+(TNF, IL-1), hypoxia, and oxidative stress. JUN-dependent cell lines are running an
+AP-1 survival program that is mechanistically incompatible with NMT1 essentiality —
+possibly because:
+1. AP-1 drives NMT2 expression (restoring paralog backup), OR
+2. The JUN transcriptional program rewires membrane trafficking away from
+   NMT1-dependent routes entirely
+
+Either mechanism is testable with existing reagents (JUN ChIP-seq × NMT2 promoter;
+NMT1 substrate profiling in JUN-high vs JUN-low cells).
+
+### Combination strategy and patient population
+
+**Mechanism:** FAK inhibitor (defactinib, VS-6063, GSK2256098) → suppresses FAK →
+reduces JUN activity → pushes mesenchymal cells below threshold → converts
+NMT1-resistant cells to NMT1-sensitive → NMT1 inhibitor closes the trap.
+
+**Unlocked patient population:** TNBC currently has only 20% NMT2-low prevalence —
+insufficient for a single-agent NMT1 inhibitor biomarker strategy. However, TNBC is
+defined by high FAK and JUN activity. FAK pre-treatment could convert a substantial
+fraction of the NMT2-sufficient TNBC population into NMT1-dependent, making TNBC
+viable as a combination indication without requiring the NMT2-low biomarker.
+
+**Biomarker for combination:** FAK phosphorylation (pY397-FAK) or JUN expression by
+IHC as patient selection for the FAK inhibitor + NMT1 inhibitor combination arm.
+pY397-FAK is already used as a pharmacodynamic readout in FAK inhibitor trials.
+
+### Summary of NMT1 indication strategy
+
+| Strategy | Population | Biomarker | Mechanism |
+|----------|-----------|-----------|-----------|
+| Single agent | Luminal B BRCA | NMT2-low (RNA/IHC) | Paralog synthetic lethality |
+| Combination | TNBC + other mesenchymal | FAK-high / JUN-high | FAK inhibitor sensitization → NMT1 dependency |
+| Exploratory | Pan-cancer NMT2-low | NMT2 z-score < -0.5 | HNSC, Ovarian, Lung SCC |
+

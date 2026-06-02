@@ -61,18 +61,24 @@ def run(config: RunConfig) -> None:
         tier1_df = screen(X_raw, x_cols, X_raw, x_cols, config)
         _status(f"[tier1] done  {len(tier1_df):,} pairs passed  ({time.monotonic() - t0:.1f}s)")
 
-    # Tier 2: phases 2-9 for filtered pairs.
-    _status(f"[tier2] deep analysis on {len(tier1_df):,} pairs...")
-    t0 = time.monotonic()
-    tier2_df = run_deep(tier1_df, X_raw, X_raw, x_cols, x_cols, phase1, phase1, config)
-    _status(f"[tier2] done  ({time.monotonic() - t0:.1f}s)")
+    if config.target_skip_tier2:
+        _status("[tier2] skipped (--skip-tier2)")
+    else:
+        # Tier 2: phases 2-9 for filtered pairs.
+        _status(f"[tier2] deep analysis on {len(tier1_df):,} pairs...")
+        t0 = time.monotonic()
+        tier2_df = run_deep(tier1_df, X_raw, X_raw, x_cols, x_cols, phase1, phase1, config)
+        _status(f"[tier2] done  ({time.monotonic() - t0:.1f}s)")
 
-    # Tier 3: bootstrap stability for top-K pairs.
-    top_k = min(config.top_k, len(tier2_df))
-    _status(f"[tier3] stability on top {top_k:,} pairs  ({config.n_boot} bootstraps)...")
-    t0 = time.monotonic()
-    run_stability(tier2_df, X_raw, X_raw, x_cols, x_cols, config)
-    _status(f"[tier3] done  ({time.monotonic() - t0:.1f}s)")
+        if config.skip_tier3:
+            _status("[tier3] skipped (--skip-tier3)")
+        else:
+            # Tier 3: bootstrap stability for top-K pairs.
+            top_k = min(config.top_k, len(tier2_df))
+            _status(f"[tier3] stability on top {top_k:,} pairs  ({config.n_boot} bootstraps)...")
+            t0 = time.monotonic()
+            run_stability(tier2_df, X_raw, X_raw, x_cols, x_cols, config)
+            _status(f"[tier3] done  ({time.monotonic() - t0:.1f}s)")
 
     # Graph construction and Louvain community detection.
     _status(f"[graph] building graph  (edge threshold={config.graph_edge_threshold})...")

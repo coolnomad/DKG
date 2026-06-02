@@ -40,6 +40,24 @@ Three findings warrant specific attention as hypotheses for follow-up:
 
 **TGFBR2 loss as a dual sensitizer.** TGFBR2 damaging mutations sensitize to AKT1/AKT2 loss (r=−0.224). Independently, pathway enrichment of the mesenchymal escape community identifies TGF-beta signaling as a core component of the resistance transcriptional program. If intact TGF-beta signaling is required for the mesenchymal escape axis to operate, then TGFBR2-mutant tumors may be doubly sensitized: they cannot execute the escape program, and — if also AKT3-low — have no paralog backup either. This is a testable hypothesis with a defined molecular logic and could identify a high-confidence responder subset independent of PIK3CA status.
 
+## Multi-omic composite score
+
+A weighted linear score combining the top-10 features per modality (Pearson r as weights, p<0.05) was built to test whether integrating data types improves predictive power over any single modality. The composite achieves r=0.596 vs AKT1/AKT2 chronos dependency — modestly above expression alone (r=0.572) and substantially above CN (r=0.426), damaging mutations (r=0.370), and hotspot mutations (r=0.335).
+
+The feature composition of each modality score reveals the mechanistic logic encoded in each data type:
+
+**Expression score (10 features):** Dominated by the two axes identified in full DKG — AKT3 (r=+0.513, paralog escape) and AKT3-correlated escape genes (DAB2, CYBRD1, TIMP2, KIF3C, PLK2), balanced against the sensitivity axis (CKMT1B/CKMT1A at r=−0.37, NRARP at r=−0.369). The expression score alone captures the most variance of any single modality, reflecting that transcriptional state integrates both the paralog compensation and mesenchymal bypass mechanisms simultaneously.
+
+**CN score (10 features):** Led by the chr17q/ERBB2 amplicon (r=+0.272, escape), 15q/CKMT1B deletion (r=−0.188, sensitivity), 10q/FGFR2 deletion (r=−0.179, sensitivity), and 6p/HLA-C gain (r=+0.178, escape). CN captures structural genomic events that are distinct from — and partially independent of — the transcriptional state captured by expression.
+
+**Hotspot mutation score (2 features):** Only PIK3CA (r=−0.308) and PTEN (r=−0.152) pass p<0.05. The sparse, binary nature of hotspot mutations means this score has limited dynamic range, reflected in the narrow x-axis spread of the panel. Despite this, PIK3CA alone achieves r=0.335 — concentrated signal in a single gene.
+
+**Damaging mutation score (10 features):** All 10 features are sensitizing (all negative r). Top hits include TENM3, CTCF, COL7A1, DYNC2H1, TGFBR2, INPPL1/SHIP2, FBN2, ARID1A, MSH2, ACVR2A. The mechanistically interpretable subset — TGFBR2 (mesenchymal escape requires intact TGF-beta), INPPL1/SHIP2 (PI3K brake), ARID1A (co-occurring with PI3K activation) — provides orthogonal mechanistic corroboration. The remainder (TENM3, COL7A1, DYNC2H1, MSH2) may reflect passenger co-occurrence with sensitizing genomic contexts rather than direct causal biology.
+
+**Composite score:** The modest gain of composite over expression alone (~0.024 r units) is expected: expression already integrates much of the biological signal because transcriptional state is downstream of both genetic and epigenetic inputs. The independent contribution of CN and mutations, though smaller, is real — CN captures physical deletion events that can precede or occur without transcriptional change, and hotspot PIK3CA mutations are functionally relevant independent of expression level.
+
+Cancer-type labeling of the composite scatter reveals that no single lineage dominates the sensitive end (low chronos, high composite score) — lung, breast, bowel, ovary, and skin all contribute sensitive cell lines, consistent with a mechanism (PI3K pathway activation + AKT3 loss) that is pan-cancer rather than lineage-restricted.
+
 ## Competitive differentiation
 
 Current AKT inhibitor development is biomarker-agnostic outside of the capivasertib genomic panel, and no approved or late-stage compound incorporates paralog expression as a selection criterion. The AKT3 biomarker is mechanistically grounded, measurable from standard RNA-seq, and prospectively stratifies the population that functional genomics predicts will respond. Pairing it with mesenchymal exclusion adds a second independent filter against intrinsic resistance. This two-biomarker framework converts a broadly active but heterogeneously effective drug class into a precision strategy with a defined, testable patient hypothesis.

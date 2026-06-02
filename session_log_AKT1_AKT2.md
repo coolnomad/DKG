@@ -543,11 +543,25 @@ Builds a weighted linear composite score per cell line from top-10 features per 
 | Damaging mut | −1.30     | 0.370     | 2.2e−10  |
 | **Composite**| −641.6    | **0.596** | 6.5e−28  |
 
+### Feature composition
+
+**Expression (10):** AKT3(+0.513), DAB2(+0.378), CKMT1B(−0.374), CYBRD1(+0.373), CKMT1A(−0.372), TIMP2(+0.371), NRARP(−0.369), KIF3C(+0.369), PLK2(+0.356), C11orf68(+0.352)
+
+**CN segments (10):** seg_125_chr17q_NACA2(+0.272), seg_111_chr15q_CATSPER2(−0.188), seg_70_chr10q_FGFR2(−0.179), seg_48_chr6p_HLA-C(+0.178), seg_109_chr15q_CKMT1B(−0.175), seg_35_chr4p_NKX1-1(+0.170), seg_23_chr2q_LRP1B(+0.169), seg_29_chr3p_FHIT(+0.163), seg_0_chr1p_GSTM1(−0.147), seg_60_chr8p_GATA4(−0.145)
+
+**Hotspot mutations (2 — only 2 pass p<0.05):** PIK3CA(−0.308), PTEN(−0.152)
+
+**Damaging mutations (10):** TENM3(−0.255), CTCF(−0.236), COL7A1(−0.235), DYNC2H1(−0.230), TGFBR2(−0.224), INPPL1(−0.216), FBN2(−0.212), ARID1A(−0.208), MSH2(−0.206), ACVR2A(−0.200)
+
+Note: hotspot panel has extremely narrow x-axis range (binary features, sparse) — correlation signal is real but dynamic range is limited.
+
 ### Interpretation
 
 **Negative R² is expected and non-problematic.** The weighted sum score is not calibrated to the chronos scale — it has arbitrary units — so SS_res > SS_tot by construction. R² is not the right metric here. **Pearson r is the valid comparison metric** because it is scale-invariant.
 
 **Composite r=0.596 beats all single modalities**, confirming that multi-omic integration adds predictive information beyond any single data type. Expression alone (r=0.572) carries the most signal; CN (r=0.426), damaging (r=0.370), and hotspot (r=0.335) each contribute independently. The modest composite gain over expression alone (~0.024 r units) reflects that expression already captures most variance and the mutation/CN features are correlated with expression signals.
+
+Cancer-type coloring (OncotreeLineage from Model.csv) added to figure — top 12 lineages labeled, rest as "Other". No single lineage dominates the sensitive end; lung, breast, bowel, ovary, and skin all contribute sensitive cell lines, consistent with a pan-cancer mechanism.
 
 ### Reproducibility
 
@@ -556,4 +570,4 @@ python scripts/akt_multiomics_score.py
 python scripts/akt_multiomics_score.py --top-n 10 --p-cutoff 0.05
 ```
 
-Prerequisites: all four tier2_target_full.parquet outputs; chronos_filtered.feather; xp_filtered.feather; cn_segments.feather; hotspot_matrix.feather; damaging_matrix.feather.
+Prerequisites: all four tier2_target_full.parquet outputs; chronos_filtered.feather; xp_filtered.feather; cn_segments.feather; hotspot_matrix.feather; damaging_matrix.feather; C:/GitHub/DepMap/data/26Q1/Model.csv.

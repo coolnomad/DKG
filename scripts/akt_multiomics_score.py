@@ -48,6 +48,7 @@ CN_TIER2      = "output/AKT1_AKT2_cn/tier2_target_full.parquet"
 HOT_TIER2     = "output/AKT1_AKT2_hotspot/tier2_target_full.parquet"
 DAM_TIER2     = "output/AKT1_AKT2_damaging/tier2_target_full.parquet"
 
+MODEL_PATH    = "C:/GitHub/DepMap/data/26Q1/Model.csv"
 TARGET        = "AKT1_AKT2"
 OUT_DIR       = Path("output/AKT1_AKT2_multiomics")
 
@@ -224,8 +225,33 @@ def main():
     score_df.write_parquet(str(OUT_DIR / "composite_score.parquet"))
     print(f"\nSaved: {OUT_DIR}/composite_score.parquet")
 
+    # ── load cancer type labels ───────────────────────────────────────────────
+    model_df = pl.read_csv(MODEL_PATH, infer_schema_length=0).select(
+        ["ModelID", "OncotreeLineage"]
+    )
+    cl_df = pl.DataFrame({"ModelID": cell_lines})
+    cl_df = cl_df.join(model_df, on="ModelID", how="left")
+    lineages_raw = cl_df["OncotreeLineage"].fill_null("Unknown").to_list()
+
+    # top N lineages by count; rest → "Other"
+    TOP_N_LIN = 12
+    from collections import Counter
+    counts = Counter(lineages_raw)
+    top_lins = [lin for lin, _ in counts.most_common(TOP_N_LIN)]
+    lineages = [lin if lin in top_lins else "Other" for lin in lineages_raw]
+
+    # build color map
+    LIN_COLORS = [
+        "#1a6faf","#e88c23","#d94f3d","#4caf6f","#9b59b6","#e74c3c",
+        "#2ecc71","#f39c12","#1abc9c","#e67e22","#3498db","#e91e63",
+        "#888888",
+    ]
+    all_lins = top_lins + ["Other"]
+    lin_color = {lin: LIN_COLORS[i % len(LIN_COLORS)] for i, lin in enumerate(all_lins)}
+    lineages_arr = np.array(lineages)
+
     # ── figure ────────────────────────────────────────────────────────────────
-    PALETTE = {
+    PANEL_COLORS = {
         "Expression":  "#1a6faf",
         "CN segments": "#e88c23",
         "Hotspot mut": "#d94f3d",
@@ -233,36 +259,55 @@ def main():
         "Composite":   "#222222",
     }
 
-    fig, axes = plt.subplots(1, 5, figsize=(16, 4), sharey=True)
+    fig, axes = plt.subplots(1, 5, figsize=(20, 4.5), sharey=True)
     fig.patch.set_facecolor("#fafafa")
 
     for ax, (label, d) in zip(axes, results.items()):
         score = d["score"]
-        mask  = ~np.isnan(score)
-        color = PALETTE.get(label, "#888888")
-        lw    = 2.5 if label == "Composite" else 1.5
+        panel_color = PANEL_COLORS.get(label, "#888888")
+        lw = 2.5 if label == "Composite" else 1.5
 
-        ax.scatter(score[mask], y[mask], s=12, alpha=0.5, color=color,
-                   edgecolors="none", zorder=2)
+        # scatter colored by lineage
+        for lin in all_lins:
+            mask = (~np.isnan(score)) & (lineages_arr == lin)
+            if mask.sum() == 0:
+                continue
+            ax.scatter(score[mask], y[mask], s=12, alpha=0.65,
+                       color=lin_color[lin], edgecolors="none", zorder=2,
+                       label=lin)
 
-        # regression line
-        m, b = np.polyfit(score[mask], y[mask], 1)
-        xs = np.linspace(score[mask].min(), score[mask].max(), 100)
-        ax.plot(xs, m * xs + b, color=color, lw=lw, zorder=3)
+        # regression line over all valid points
+        mask_all = ~np.isnan(score)
+        m_fit, b_fit = np.polyfit(score[mask_all], y[mask_all], 1)
+        xs = np.linspace(score[mask_all].min(), score[mask_all].max(), 100)
+        ax.plot(xs, m_fit * xs + b_fit, color=panel_color, lw=lw, zorder=3)
 
-        ax.set_title(label, fontsize=9, fontweight="bold" if label == "Composite" else "normal")
+        ax.set_title(label, fontsize=9,
+                     fontweight="bold" if label == "Composite" else "normal")
         ax.set_xlabel("Score", fontsize=8)
-        ax.text(0.05, 0.95, f"R²={d['r2']:.3f}\nr={d['r']:.3f}",
+        ax.text(0.05, 0.95, f"r={d['r']:.3f}",
                 transform=ax.transAxes, fontsize=8, va="top",
-                color=color, fontweight="bold" if label == "Composite" else "normal")
+                color=panel_color,
+                fontweight="bold" if label == "Composite" else "normal")
         ax.spines[["top", "right"]].set_visible(False)
         ax.set_facecolor("#fafafa")
         ax.grid(color="#e8e8e8", lw=0.6)
 
     axes[0].set_ylabel(f"{TARGET} chronos score", fontsize=9)
-    fig.suptitle(f"AKT1_AKT2 — single-modality vs composite score (top {args.top_n} features each)",
-                 fontsize=10, fontweight="bold")
-    fig.tight_layout()
+    fig.suptitle(
+        f"AKT1_AKT2 — single-modality vs composite score (top {args.top_n} features each)",
+        fontsize=10, fontweight="bold"
+    )
+
+    # shared legend below figure
+    handles = [plt.Line2D([0], [0], marker="o", color="w",
+                           markerfacecolor=lin_color[lin], markersize=6, label=lin)
+               for lin in all_lins]
+    fig.legend(handles=handles, loc="lower center", ncol=7,
+               fontsize=7, frameon=False,
+               bbox_to_anchor=(0.5, -0.08))
+
+    fig.tight_layout(rect=[0, 0.04, 1, 1])
 
     fig_path = OUT_DIR / "composite_score.png"
     fig.savefig(str(fig_path), dpi=180, bbox_inches="tight",

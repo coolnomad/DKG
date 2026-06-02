@@ -523,3 +523,37 @@ python scripts/akt_multiomics_convergence.py --p-cutoff 0.01  # stricter thresho
 ```
 
 Prerequisites: all four tier2_target_full.parquet outputs and output/cn_segments/segment_manifest.parquet must exist.
+
+---
+
+## Multi-omic composite score and R² comparison
+
+**Script:** `scripts/akt_multiomics_score.py`
+**Output:** `output/AKT1_AKT2_multiomics/composite_score.parquet`, `r2_comparison.txt`, `composite_score.png`
+
+Builds a weighted linear composite score per cell line from top-10 features per modality (|r|, p<0.05), using Pearson r as feature weights. Compares single-modality scores vs composite.
+
+### Results (top-10 per modality, p<0.05)
+
+| Modality     | R²        | Pearson r | p        |
+|--------------|-----------|-----------|----------|
+| Expression   | −642.9    | 0.572     | 2.4e−25  |
+| CN segments  | −2.43     | 0.426     | 1.4e−13  |
+| Hotspot mut  | −1.55     | 0.335     | 1.1e−08  |
+| Damaging mut | −1.30     | 0.370     | 2.2e−10  |
+| **Composite**| −641.6    | **0.596** | 6.5e−28  |
+
+### Interpretation
+
+**Negative R² is expected and non-problematic.** The weighted sum score is not calibrated to the chronos scale — it has arbitrary units — so SS_res > SS_tot by construction. R² is not the right metric here. **Pearson r is the valid comparison metric** because it is scale-invariant.
+
+**Composite r=0.596 beats all single modalities**, confirming that multi-omic integration adds predictive information beyond any single data type. Expression alone (r=0.572) carries the most signal; CN (r=0.426), damaging (r=0.370), and hotspot (r=0.335) each contribute independently. The modest composite gain over expression alone (~0.024 r units) reflects that expression already captures most variance and the mutation/CN features are correlated with expression signals.
+
+### Reproducibility
+
+```bash
+python scripts/akt_multiomics_score.py
+python scripts/akt_multiomics_score.py --top-n 10 --p-cutoff 0.05
+```
+
+Prerequisites: all four tier2_target_full.parquet outputs; chronos_filtered.feather; xp_filtered.feather; cn_segments.feather; hotspot_matrix.feather; damaging_matrix.feather.

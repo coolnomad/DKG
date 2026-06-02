@@ -477,3 +477,49 @@ mechanisms that together explain ~85% of the inter-cell-line variance in AKT1_AK
 
 
 
+
+---
+
+## Multi-omic integration — convergence table
+
+**Script:** `scripts/akt_multiomics_convergence.py`
+**Output:** `output/AKT1_AKT2_multiomics/convergence_table.parquet` (25,842 gene rows)
+
+Integrates four modalities against AKT1_AKT2 chronos:
+- Expression XY (`output/AKT1_AKT2_full/tier2_target_full.parquet`)
+- CN segments XY (`output/AKT1_AKT2_cn/tier2_target_full.parquet`) — expanded to gene level via segment manifest
+- Hotspot mutations (`output/AKT1_AKT2_hotspot/tier2_target_full.parquet`)
+- Damaging mutations (`output/AKT1_AKT2_damaging/tier2_target_full.parquet`)
+
+Significance threshold: p<0.05. Genes ranked by n_modalities then mean |r|.
+
+### Results
+
+**3-modality convergence (1 gene):**
+- **RNF43**: expr r=-0.13 | CN r=+0.27 (chr17q segment) | damaging r=-0.15
+  - NOTE: CN signal rides the chr17q/ERBB2 amplicon — not independent. Expression and damaging both sensitizing (negative). RNF43 is a Wnt pathway ubiquitin ligase (degrades Frizzled receptors); worth investigating independently of the chr17q CN attribution.
+
+**2-modality convergence (461 genes):**
+- Top cluster is dominated by chr17q segment genes (TIMP2, SMURF2, HGS, etc.) — these show expression r=+0.24–0.37 AND cn r=+0.27 because the chr17q ERBB2 amplicon drives both signals. This is not independent convergence; it is one biological event (HER2 amp) showing up in two data types.
+- **CKMT1B** (expr r=-0.37 | CN r=-0.18): the only true cross-modal convergence in the sensitivity direction — two independent signals (transcription and physical copy number loss) pointing at the same 15q locus. Highest-confidence metabolic sensitivity biomarker.
+
+**Key finding:** PIK3CA does not appear as a convergence hit because the biomarker is mutation-based (hotspot), not expression-based. This is expected and correct — it reflects the biology (activating point mutation, not dosage effect).
+
+### Interpretation notes
+
+1. **Segment-level CN expansion inflates convergence** for large arm-level segments (chr17q, chr15q). When a segment contains hundreds of genes, all of them "inherit" the segment's r/p. True independent convergence requires that the expression and CN signals run in the same direction AND reflect distinct molecular phenomena. Only CKMT1B meets this bar clearly.
+
+2. **CKMT1B is the highest-confidence multi-omic biomarker** for AKT1_AKT2 sensitivity: negative r in expression (low expression → more essential) and negative r in CN (copy number loss → more essential). Two orthogonal data types, same direction, same locus.
+
+3. **chr17q/ERBB2 amplicon** is the highest-confidence multi-omic escape signal but is not independently replicated — it is one event appearing correlated across expression and CN because amplification drives both.
+
+4. **RNF43** warrants follow-up: gene-level expression and damaging mutation both sensitizing, but the CN component needs to be evaluated on the RNF43 locus directly (17q12 sub-region) rather than the full arm segment.
+
+### Reproducibility
+
+```bash
+python scripts/akt_multiomics_convergence.py
+python scripts/akt_multiomics_convergence.py --p-cutoff 0.01  # stricter threshold
+```
+
+Prerequisites: all four tier2_target_full.parquet outputs and output/cn_segments/segment_manifest.parquet must exist.

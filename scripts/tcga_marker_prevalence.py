@@ -62,7 +62,7 @@ def main():
     parser.add_argument("--primary", required=True,
                         help="Primary gene symbol to sort by")
     parser.add_argument("--primary-direction", choices=["low", "high"], default="low",
-                        help="Sort by % low (z < -0.5) or % high (z > 0.5)")
+                        help="Sort by %% low (z < -0.5) or %% high (z > 0.5)")
     parser.add_argument("--threshold", type=float, default=0.5,
                         help="Absolute z-score threshold (default 0.5)")
     parser.add_argument("--min-n", type=int, default=30,
@@ -108,7 +108,7 @@ def main():
 
         if row.get(f"{args.primary}_n", 0) >= args.min_n:
             results.append(row)
-            parts = [f"{sym}={'%.1f' % row[f'{sym}_pct_low']}%↓ {'%.3f' % row[f'{sym}_median_z']}z"
+            parts = [f"{sym}={'%.1f' % row[f'{sym}_pct_low']}%low {'%.3f' % row[f'{sym}_median_z']}z"
                      for sym in genes if row.get(f'{sym}_n', 0) >= args.min_n]
             print(f"  {sid}: {' | '.join(parts)}")
 

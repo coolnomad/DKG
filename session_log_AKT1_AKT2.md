@@ -748,3 +748,53 @@ C1_sd ≤ 0.76 is the dominant selective criterion (6–63% pass rate vs 60–81
 2. **C1_sd threshold portability**: The 0.76 threshold was learned from 265 cell lines. In patient tumors with more stromal contamination, C1_sd may be inflated artifactually (stroma is mesenchymal). This could systematically reduce pass rates in bulk tumor RNA-seq relative to what was observed in cell lines.
 3. **TCGA is biased toward resectable tumors**: Pancreatic TCGA (n=177) skews toward resected patients who are healthier and earlier-stage than the metastatic patients targeted by AKT inhibitors. The 47.5% pass rate may not apply to metastatic pancreatic cancer.
 4. **Rule specified by gene CN, applied to continuous log2CNA**: The CCND1 and ERBB2 thresholds (≤1.14 log2) correspond to roughly 2 copies — normal diploid. Any amplification fails. This is a conservative exclusion; a threshold at ≥3 copies (log2≥1.58) would enrich rather than exclude.
+
+---
+
+## Clinical trial design
+
+**Question:** What would a clinical trial look like for the AKT1/AKT2 dual inhibition + C0/C1 selection rule?
+
+### Recommended design: biomarker-selected Phase 2 basket
+
+**Drug:** Capivasertib (FDA-approved — IND de-risked, CMC solved, safety profile established)
+
+**Lead indications:** Colorectal and prostate as co-primary cohorts — largest eligible absolute volumes (67k and 104k/yr respectively), high unmet need in post-SOC lines, no approved AKT inhibitor in either indication.
+
+**Design:** Multi-cohort Simon 2-stage (or Bayesian optimal interval design), single-arm, ORR primary endpoint, biomarker composite as enrollment gate.
+
+### Assay development (prerequisite)
+
+The rule requires RNA-seq Z-scores relative to a pan-cancer reference — not a clinical assay. Must be operationalized before a trial opens. Two paths:
+
+**Option A — Targeted RNA panel (preferred):** Select top-degree C0 and C1 genes (~30–50 each), build nCounter or Foundation/Tempus RNA panel, calibrate Z-scores against a locked reference cohort of archived FFPE tumors. CCND1 and ERBB2 amplification are already in every solid tumor NGS panel. Timeline: 12–18 months.
+
+**Option B — Whole transcriptome from FFPE:** Technically feasible but operationally heavier. Better as a data capture strategy to refine the panel, not as a primary enrollment assay.
+
+**C1_sd is the highest-risk criterion for assay translation.** It is a within-sample variance estimate across community members — sensitive to gene panel composition and RNA quality from FFPE, and potentially inflated by stromal contamination (stroma is mesenchymal). Requires prospective calibration against a reference population with known stromal fraction.
+
+### Sample size
+
+Working backward from cell line data with translation discounts:
+
+| Layer | Assumption | Est. ORR |
+|---|---|---|
+| Cell line precision | 89% (chronos ≤ −0.7) | — |
+| Genetic→pharmacological loss | ~50% of functional dependencies respond to drug | ~45% |
+| Patient heterogeneity/stromal confounding | 20–30% further attenuation | ~30–35% |
+
+Against null ORR ~12–15% (SOC in 2L+ colorectal), target ORR 30–35% at 80% power requires ~35–40 patients per cohort (Simon 2-stage: enroll 15 → if ≥3 responses continue → total 40, reject if <9/40). Two cohorts = ~80 evaluable patients.
+
+### Key design choices
+
+**Biomarker-unselected parallel arm:** Including an unselected arm directly estimates enrichment — whether the rule actually improves ORR vs. unselected capivasertib. Adds ~40 patients but answers whether screening is worth the cost. Strongly recommended if operationally feasible.
+
+**Intersection with PIK3CA/AKT1/PTEN alteration (the approved biomarker):** Pre-specify collection of PIK3CA/AKT1/PTEN status in all enrolled patients and test for interaction. DKG analysis predicts the C0/C1 rule and the genomic activation rule are orthogonal — if true, patients passing both would be the highest-confidence subgroup. If correlated, the C0 rule may be functioning as a functional readout of pathway activation (not purely additive).
+
+**Expansion cohort path:** If the sponsor has a running capivasertib trial in any solid tumor, a biomarker-selected expansion cohort is lowest-friction — avoids a new IND, uses existing infrastructure.
+
+### Key unknowns not answerable from DKG analysis
+
+1. **C1_sd in bulk tumor vs. cell lines**: Stromal contamination in FFPE could inflate C1_sd (stroma is mesenchymal), reducing pass rates relative to cell line estimates. This is the highest-priority prospective validation experiment before opening a trial.
+2. **False positive mechanism**: SW837, SNU-869, and CCLF_UPGI_0025_T satisfy all four criteria but do not respond. If their escape mechanism is common in patients, the clinical ORR would be lower than the 89% precision implies. Retrospective analysis of existing capivasertib trial biosamples would directly test this.
+3. **Functional-to-pharmacological translation**: Chronos measures genetic dependency under complete KO. Capivasertib does not fully eliminate AKT1/AKT2 activity — translation loss from the 89% precision figure to clinical ORR is uncertain and depends on drug exposure achieved in tumor tissue.

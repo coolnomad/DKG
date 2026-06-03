@@ -136,3 +136,31 @@ Several caveats govern translation to patients:
 ## Competitive differentiation
 
 Current AKT inhibitor development is biomarker-agnostic outside of the capivasertib genomic panel, and no approved or late-stage compound incorporates paralog expression as a selection criterion. The AKT3 biomarker is mechanistically grounded, measurable from standard RNA-seq, and prospectively stratifies the population that functional genomics predicts will respond. Pairing it with mesenchymal exclusion adds a second independent filter against intrinsic resistance. This two-biomarker framework converts a broadly active but heterogeneously effective drug class into a precision strategy with a defined, testable patient hypothesis.
+
+## Clinical trial design
+
+### Recommended design: biomarker-selected Phase 2 basket
+
+**Drug:** Capivasertib. FDA approval in HR+/HER2− breast cancer (November 2023) de-risks the IND, solves CMC, and establishes the safety profile. A biomarker-expansion study in additional indications is the natural regulatory path.
+
+**Lead indications:** Colorectal and prostate as co-primary cohorts. Both have large eligible volumes under the RF-guided rule (colorectal 44%, 67k/yr; prostate 36%, 104k/yr), high unmet need in post-standard-of-care lines, and no approved AKT inhibitor. GI enrichment in the selection rule is mechanistically grounded in the C0 program biology.
+
+**Design:** Multi-cohort Simon 2-stage, single-arm, ORR primary endpoint. Biomarker composite assessed at enrollment as gate. Enroll 15 per cohort → if ≥3 responses continue to 40 total → require ≥9/40 to declare signal (targeting 30–35% ORR vs. 12–15% null at 80% power, ~35–40 evaluable per cohort, ~80 total across two indications).
+
+**Biomarker-unselected parallel arm:** Including an unselected arm (no screen required) directly estimates enrichment and answers whether the biomarker adds clinical value beyond unselected capivasertib. Adds ~40 patients per cohort but is the most informative design decision available.
+
+### Prerequisite: clinical-grade assay development
+
+The rule requires RNA-seq Z-scores computed against a pan-cancer reference — not directly deployable. Operationalization requires a targeted RNA panel (nCounter or commercial RNA profiling covering top-degree C0 and C1 members, ~30–50 genes each) with Z-scores calibrated against a locked FFPE reference cohort. CCND1 and ERBB2 amplification are already reported by every solid tumor NGS panel. Timeline: 12–18 months.
+
+**C1_sd is the highest-risk criterion for assay translation.** It is a within-sample variance estimate across community members, sensitive to panel gene selection, RNA quality from FFPE, and stromal contamination (stroma is mesenchymal — bulk tumor RNA-seq from stromal-rich tumors may inflate C1_sd artifactually). Prospective calibration in FFPE samples with known stromal fraction is required before enrollment can open.
+
+### Intersection with approved biomarker
+
+Pre-specify collection of PIK3CA/AKT1/PTEN status in all enrolled patients and test for interaction with the C0/C1 rule. The DKG analysis predicts these are orthogonal — one captures metabolic/epithelial program state, the other genomic PI3K/AKT activation. If orthogonal, patients satisfying both are the highest-confidence responder stratum. If correlated, the C0 rule may function as a transcriptional readout of pathway activation rather than an independent axis — a biologically important distinction that changes how the biomarker would be positioned.
+
+### Key open questions before trial
+
+1. **C1_sd in bulk tumor vs. cell lines:** Stromal contamination may inflate mesenchymal heterogeneity estimates in patient biopsies, systematically reducing the pass rate relative to cell line predictions. This is the highest-priority experiment before trial design is finalized.
+2. **False positive mechanism:** The three cell line false positives (SW837, SNU-869, CCLF_UPGI_0025_T) satisfy all four criteria but are not strong responders. If their escape mechanism is prevalent in patient tumors, clinical ORR would track below the 89% cell line precision. Retrospective analysis of existing capivasertib trial biosamples — if available — would directly test this.
+3. **Drug exposure in tumor:** Capivasertib does not fully eliminate AKT1/AKT2 kinase activity at clinical doses. Chronos captures complete genetic loss; pharmacological inhibition is partial. Translation loss from the 89% precision to clinical ORR is uncertain and exposure-dependent.

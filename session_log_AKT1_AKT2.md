@@ -571,3 +571,90 @@ python scripts/akt_multiomics_score.py --top-n 10 --p-cutoff 0.05
 ```
 
 Prerequisites: all four tier2_target_full.parquet outputs; chronos_filtered.feather; xp_filtered.feather; cn_segments.feather; hotspot_matrix.feather; damaging_matrix.feather; C:/GitHub/DepMap/data/26Q1/Model.csv.
+
+---
+
+## Multi-omic patient selection model
+
+**Script:** `scripts/akt_selection_model.py`
+**Output:** `output/AKT1_AKT2_multiomics/selection_model/`
+
+### Motivation
+
+Goal: find an interpretable combination rule across molecular data types that identifies a high-precision strong-responder subgroup (chronos ≤ -0.7), rather than maximizing overall prediction performance.
+
+### Feature matrix construction
+
+**n = 265 cell lines** (intersection of chronos, expression, CN segments, hotspot, damaging mutation matrices)
+
+**Expression features — community Z-score summaries (12 features, no target leakage):**
+- Communities C0, C1, C2 derived from AKT1_AKT2 XX co-expression DKG (gene-gene structure, independent of AKT1_AKT2 chronos)
+- For each gene: Z-score computed across ALL cell lines in expression matrix (population-level normalization)
+- For each cell line × community: mean, SD, skewness, kurtosis of member gene Z-scores → 4 stats × 3 communities = 12 features
+- Key distinction from individual gene selection: community assignment was derived without reference to the target; no leakage
+
+**CN features (167):** all segments from `output/cn_segments/cn_segments.feather` (continuous log2 ratio values)
+
+**Hotspot mutation features (15):** all genes from `output/mutations/hotspot_matrix.feather` (binary)
+
+**Damaging mutation features (186):** all genes from `output/mutations/damaging_matrix.feather` (binary)
+
+**Total: 380 features**
+
+### Target
+
+AKT1_AKT2 chronos ≤ -0.7: 75/265 responders (28.3%)
+
+### Model results
+
+**Decision tree (depth=4, min_leaf=15, class_weight=balanced):**
+- Train precision=0.677  recall=0.840
+- 5-fold CV AUC: 0.659 ± 0.044
+
+**Random forest (500 trees, min_leaf=5, class_weight=balanced):**
+- OOB AUC: 0.774
+- 5-fold CV AUC: 0.758 ± 0.077
+
+### High-precision leaf (leaf 11)
+
+**Rule:** `C0_mean > -0.16` AND `chr11q/CCND1 seg ≤ 1.14` AND `chr1p/CELA3B seg > 1.00`
+**Result:** 24/27 cell lines are strong responders — **precision=0.889, recall=0.320**
+
+**Cell lines (sorted by chronos):**
+- Rh4 (-2.15, Rhabdomyosarcoma), Hs 766T (-1.92, Pancreas), ESO26 (-1.78, Esophagogastric)
+- OVK18 (-1.64, Ovarian), SNU-601 (-1.56, Esophagogastric), HEC-59 (-1.42, Endometrial)
+- SNU-C5 (-1.40, Colorectal), NCI-H716 (-1.34, Colorectal), JAR (-1.27, GTD)
+- CCLF_UPGI_0074 (-1.26, Esophagogastric), SNU-308 (-1.26, Biliary), SNU-16 (-1.08, Esophagogastric)
+- OV-90 (-1.04, Ovarian), MGH-ICC8 (-1.03, Biliary), OC 316 (-0.96, Ovarian)
+- OUMS-23 (-0.96, Colorectal), OVISE (-0.95, Ovarian), KKU-213 (-0.95, Biliary)
+- UM-UC-5 (-0.87, Bladder), FLO-1 (-0.86, Esophagogastric), YSCCC (-0.85, Biliary)
+- SNU-1 (-0.84, Esophagogastric), JJN-3 (-0.82, B-cell lymphoma), 23132/87 (-0.74, Esophagogastric)
+- Non-responders (3): SW837 (-0.63, Colorectal), SNU-869 (-0.33, Ampulla), CCLF_UPGI_0025_T (-0.14, Esophagogastric)
+
+**Lineage breakdown:** Esophagogastric 6, Ovarian 4, Biliary 3, Colorectal 3, Uterine 2, Pancreas/Rhabdo/Bladder/Lymphoid 1 each. No breast, no lung.
+
+### C0 community interpretation (93 genes)
+
+C0 = **oxidative metabolism + differentiated epithelial identity program**
+
+Top members by co-expression degree:
+- **Mitochondrial/metabolic:** CKMT1A, CKMT1B (creatine kinase mito), PCK2 (mito PEPCK/gluconeogenesis), CPT2 (fatty acid β-oxidation), UQCRC2 (complex III), PPARGC1B (PGC-1β, mito biogenesis), ECI1 (FA oxidation), MPC1.DT (pyruvate carrier)
+- **Differentiated epithelial identity:** CEBPA/CEBPG (C/EBP TFs), FOXA3 (liver/gut epithelial), HES1 (Notch/epithelial), TFF1 (gastric/intestinal mucosa), VHL (HIF/oxygen sensing), PITX1 (GI development), FGFR2
+- **C0_mean high = active oxidative metabolism + intact epithelial differentiation**
+
+This is mechanistically consistent with the sensitivity axis in the narrative: differentiated, metabolically active, non-mesenchymal cells with no AKT3 backup. The GI enrichment reflects that gastric/esophageal/biliary tumors with intact epithelial identity retain this program at high levels.
+
+**chr11q/CCND1 exclusion:** The tree splits out CCND1-amplified tumors (common in esophageal squamous, head/neck) as non-responders — cyclin D1 amplification may confer RB pathway bypass, reducing AKT dependency regardless of epithelial identity.
+
+### RF feature importances — top finding
+
+All four community mean features (C0_mean, C2_mean, C1_mean, C0_sd) rank above all CN segments and mutations. Expression community summaries carry ~4-6× more importance than the next best individual feature (seg_125_chr17q/ERBB2). PIK3CA appears in top 30, confirming hotspot mutation contribution despite sparsity.
+
+### Reproducibility
+
+```bash
+python scripts/akt_selection_model.py
+python scripts/akt_selection_model.py --cutoff -0.7 --tree-depth 4 --min-leaf 15
+```
+
+Prerequisites: chronos_filtered.feather, xp_filtered.feather, cn_segments.feather, hotspot_matrix.feather, damaging_matrix.feather, output/AKT1_AKT2_full/xx/communities.parquet

@@ -58,6 +58,40 @@ The feature composition of each modality score reveals the mechanistic logic enc
 
 Cancer-type labeling of the composite scatter reveals that no single lineage dominates the sensitive end (low chronos, high composite score) — lung, breast, bowel, ovary, and skin all contribute sensitive cell lines, consistent with a mechanism (PI3K pathway activation + AKT3 loss) that is pan-cancer rather than lineage-restricted.
 
+## Multi-omic patient selection rule
+
+### Feature construction
+
+To identify a precise, interpretable patient selection rule, a decision tree and random forest were trained on a 380-feature matrix spanning all four molecular modalities for 265 cell lines with complete data.
+
+Expression features were constructed without target leakage by summarizing co-expression communities derived from the AKT1_AKT2 XX DKG — a gene-gene co-expression analysis that is structurally independent of the AKT1_AKT2 chronos target. Three communities (C0, C1, C2) were identified among the 304 genes in the co-expression graph. For each gene, Z-scores were computed across all cell lines in the expression matrix (population-level normalization). For each cell line, each community was then represented by four statistics of its members' Z-scores: mean, standard deviation, skewness, and kurtosis. This yields 12 expression features (3 communities × 4 statistics) that capture the activation level and shape of each transcriptional program per cell line, without selecting individual genes based on their correlation with the target.
+
+CN segment features (167) and mutation features (15 hotspot, 186 damaging) were included in full — no pre-selection — giving 380 total features. The target was chronos ≤ −0.7 (strong responder; 75/265 cell lines, 28.3%).
+
+### Model performance
+
+The random forest (500 trees, OOB AUC=0.774, 5-fold CV AUC=0.758) substantially outperforms the depth-4 decision tree (CV AUC=0.659), as expected. Feature importance from the random forest reveals that the three community mean features (C0_mean, C2_mean, C1_mean) each individually outperform every CN segment and mutation feature, with the chr17q/ERBB2 amplicon segment ranking fifth. Expression program activation level is the dominant signal in the feature space; genomic events refine it at the margin.
+
+### High-precision selection rule
+
+The decision tree identifies a leaf with **precision=0.889 (24/27 cell lines are strong responders)** covering 32% of all responders:
+
+> **C0_mean > −0.16** AND **chr11q/CCND1 segment ≤ 1.14** AND **chr1p/CELA3B segment > 1.00**
+
+This rule selects cells with an active C0 transcriptional program that do not carry CCND1 amplification and have intact chr1p copy number.
+
+### C0 community: oxidative metabolism and epithelial identity
+
+C0 contains 93 genes whose co-expression defines a program of **active oxidative metabolism and differentiated epithelial identity**. The highest-degree members include CKMT1A and CKMT1B (mitochondrial creatine kinase, the top individual sensitivity correlates from XY analysis), alongside PCK2 (mitochondrial PEPCK), CPT2 (fatty acid β-oxidation), UQCRC2 (respiratory chain complex III), PPARGC1B (PGC-1β, master regulator of mitochondrial biogenesis), and ECI1 (fatty acid oxidation). The epithelial identity component is defined by CEBPA and CEBPG (C/EBP transcription factors), FOXA3 (liver/gut epithelial master regulator), HES1 (Notch pathway, epithelial differentiation), TFF1 (gastric/intestinal mucosal marker), and VHL (HIF/oxygen sensing). High C0_mean in a cell line means that cell is running active oxidative phosphorylation and maintains a differentiated epithelial transcriptional identity — precisely the cellular context in which AKT1/AKT2 dependency was predicted to be strongest.
+
+The chr11q/CCND1 exclusion criterion filters out tumors with cyclin D1 amplification. CCND1 amplification is frequent in esophageal squamous cell carcinoma and head and neck cancers and drives cell cycle progression through CDK4/6-RB, potentially providing survival signaling that reduces AKT dependency even in epithelial, metabolically active cells.
+
+### Indication landscape of the high-precision leaf
+
+The 24 confirmed responders span: esophagogastric adenocarcinoma (6), ovarian epithelial tumor (4), biliary tract (3), colorectal adenocarcinoma (3), uterus (2), and one each of pancreas, rhabdomyosarcoma, bladder, and B-cell lymphoma. Notably, **no breast and no lung lines appear**, despite breast cancer being the approved indication for capivasertib. This rule is identifying a distinct high-confidence stratum enriched in GI and gynecologic tumors — consistent with the biology of the C0 program (gastric/intestinal epithelial identity genes TFF1, FOXA3, PITX1 are core C0 members) and orthogonal to the approved PI3K-altered breast cancer population.
+
+This does not mean the rule is better than the approved biomarker for breast cancer — it means the two selection strategies are identifying different patient populations. The C0-high, CCND1-unamplified rule describes a precision stratum currently outside any approved indication, with a mechanistic basis (oxidative metabolism + epithelial identity + no cyclin D1 bypass) that is distinct from the PIK3CA/AKT1/PTEN genomic activation framework underlying capivasertib's approval.
+
 ## Competitive differentiation
 
 Current AKT inhibitor development is biomarker-agnostic outside of the capivasertib genomic panel, and no approved or late-stage compound incorporates paralog expression as a selection criterion. The AKT3 biomarker is mechanistically grounded, measurable from standard RNA-seq, and prospectively stratifies the population that functional genomics predicts will respond. Pairing it with mesenchymal exclusion adds a second independent filter against intrinsic resistance. This two-biomarker framework converts a broadly active but heterogeneously effective drug class into a precision strategy with a defined, testable patient hypothesis.

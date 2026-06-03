@@ -96,30 +96,33 @@ This does not mean the rule is better than the approved biomarker for breast can
 
 ### TCGA cohort projection
 
-The RF-guided rule was applied to 20 TCGA PanCancer Atlas 2018 cohorts (n=7,262 tumors total) via cBioPortal API, using per-indication RNA-seq Z-scores for community members and log2CNA for CCND1 and ERBB2. Missing data were treated as passing (neutral). SEER 2022 annual US incidence was used to convert pass rates to absolute patient estimates.
+The RF-guided rule (corrected; see below) was applied to 20 TCGA PanCancer Atlas 2018 cohorts (n=7,262 tumors total) via cBioPortal API, using per-indication RNA-seq Z-scores for community members and log2CNA for CCND1 and ERBB2. Missing data were treated as passing (neutral). SEER 2022 annual US incidence was used to convert pass rates to absolute patient estimates.
 
-**C1_sd ≤ 0.76 is the most selective criterion**, passing 6–63% by indication versus 60–81% for C0_mean, 66–100% for CCND1, and 86–100% for ERBB2. This criterion (low mesenchymal program heterogeneity) is doing most of the work in narrowing the eligible population.
+**Corrected rule:** C0_mean > −0.16, CCND1 ≤ 1.14, ERBB2 ≤ 1.14, **C1_sd > 0.76**. An earlier version of this rule had C1_sd ≤ 0.76 (inverted criterion) — that version produced incorrect cohort estimates and has been superseded.
 
-**Top eligible indications by percentage:**
+**C1_sd > 0.76** (high mesenchymal program heterogeneity) passes 37–94% by indication. It is permissive in hematopoietic and mesenchymal tumors (AML 94%, sarcoma 94%) and selective in desmoplastic GI tumors (pancreas 37%, stomach 39%), where uniform stromal activation yields low C1 variance.
+
+**Top eligible indications by absolute volume:**
 
 | Indication | % Eligible | Est. US patients/yr |
 |---|---|---|
-| Pancreas | 47.5% | 31,500 |
-| Colorectal | 44.3% | 67,700 |
-| Stomach | 38.3% | 10,300 |
-| Prostate | 36.1% | 104,100 |
-| Kidney (ccRCC) | 31.4% | 25,700 |
-| Bladder | 32.2% | 26,800 |
+| Prostate | 43.4% | 125,100 |
+| Breast | 36.6% | 113,700 |
+| Lung (adeno) | 42.7% | 55,600 |
+| Colorectal | 31.6% | 48,300 |
+| Skin (melanoma) | 47.2% | 47,100 |
+| Kidney (ccRCC) | 45.3% | 37,100 |
+| Uterus | 53.3% | 35,300 |
 
-**Low eligibility:** Sarcoma (5.5%) and AML (5.8%) — consistent with the high C1 heterogeneity in mesenchymal and hematopoietic tumors respectively.
+**Total estimated eligible across 20 indications: ~639,000 patients/year (US)**
 
-**Total estimated eligible across 20 indications: ~452,000 patients/year (US)**
+**Biological plausibility caveat for AML and sarcoma (54–56% eligible):** These indications have high C1_sd in TCGA (94% pass rate), but the best-precision cell line leaf contains only 1 sarcoma line and no AML lines. The C0 program's meaning in non-epithelial tumors may differ from its meaning in the epithelial/GI cell lines that define the rule. AML and sarcoma estimates should be treated as exploratory until cell-line-to-patient generalizability is confirmed in those lineages.
 
-The GI enrichment (colorectal 44%, pancreas 48%, stomach 38%) is consistent with the C0 program biology — TFF1, FOXA3, and PITX1 are core C0 members with strong GI epithelial expression — and confirms that the rule is identifying a biologically coherent subset rather than a statistical artifact. The large addressable volumes in colorectal and prostate cancer, combined with the 89% precision from cell line data, position these as priority indications for a prospective biomarker validation study.
+**GI tumors drop substantially** relative to the wrong rule (pancreas 47.5% → 18.6%, stomach 38.3% → 18.9%). Desmoplastic GI tumors have uniformly activated stroma — low C1_sd — and therefore fail the C1_sd > 0.76 criterion. This is mechanistically coherent but reduces the GI opportunity significantly compared to the initial (incorrect) estimate.
 
 ### Clinical translation
 
-Applied to the cell line panel: the rule selects 27/265 lines (10.2%), of which 24 are strong responders — a precision of 89% and a number needed to treat of 1.125. The rule captures 24/75 (32%) of all strong responders. False positive assignment among non-responders is 3/190 (1.6%).
+Applied to the cell line panel (corrected rule, current RF-guided tree): the rule selects 16/265 lines (6.0%), of which 15 are strong responders — a precision of **93.8%** and a number needed to treat of 1.07. The rule captures 15/75 (20%) of all strong responders. False positive assignment among non-responders is 1/190 (0.5%).
 
 Several caveats govern translation to patients:
 
@@ -143,7 +146,7 @@ Current AKT inhibitor development is biomarker-agnostic outside of the capivaser
 
 **Drug:** Capivasertib. FDA approval in HR+/HER2− breast cancer (November 2023) de-risks the IND, solves CMC, and establishes the safety profile. A biomarker-expansion study in additional indications is the natural regulatory path.
 
-**Lead indications:** Colorectal and prostate as co-primary cohorts. Both have large eligible volumes under the RF-guided rule (colorectal 44%, 67k/yr; prostate 36%, 104k/yr), high unmet need in post-standard-of-care lines, and no approved AKT inhibitor. GI enrichment in the selection rule is mechanistically grounded in the C0 program biology.
+**Lead indications:** Prostate and lung adenocarcinoma as co-primary cohorts (corrected rule). Prostate leads by absolute eligible volume (43%, 125k/yr); lung adeno provides a distinct solid tumor context with high unmet need in post-SOC lines and strong C0_mean pass rate (71%). Colorectal remains a secondary cohort (32%, 48k/yr) given prior trial experience with AKT inhibitors in CRC and the mechanistic understanding of why prior selection failed.
 
 **Design:** Multi-cohort Simon 2-stage, single-arm, ORR primary endpoint. Biomarker composite assessed at enrollment as gate. Enroll 15 per cohort → if ≥3 responses continue to 40 total → require ≥9/40 to declare signal (targeting 30–35% ORR vs. 12–15% null at 80% power, ~35–40 evaluable per cohort, ~80 total across two indications).
 

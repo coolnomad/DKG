@@ -1,6 +1,6 @@
 {
-  "name": "RF_guided_4criterion",
-  "description": "Top-10 RF feature tree best precision leaf: active C0 program, no CCND1 amp, no HER2/chr17q amp, low C1 heterogeneity. Derived from RF-guided decision tree (depth 4, min_leaf 15, top-10 RF features).",
+  "name": "RF_guided_4criterion_v2",
+  "description": "Best-precision leaf from RF-guided decision tree (depth 4, min_leaf 15, top-10 RF features): active C0 oxidative/epithelial program, no CCND1 amp, no chr17q/NACA2 amp, high C1 heterogeneity. C1_sd > 0.76 corrected from prior erroneous C1_sd <= 0.76. DepMap precision: 15/16 = 93.8%.",
   "conditions": [
     {
       "type": "community_stat",
@@ -25,7 +25,7 @@
       "type": "community_stat",
       "community": 1,
       "stat": "sd",
-      "operator": "<=",
+      "operator": ">",
       "threshold": 0.76
     }
   ]

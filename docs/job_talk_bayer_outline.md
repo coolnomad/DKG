@@ -50,13 +50,15 @@ Three independent molecular data types pointing at the same biology. This is not
 **Cell line performance:** 15/16 selected lines are strong responders (chronos ≤ −0.7). Precision = 93.8%. NNT = 1.07.
 
 ### TCGA translation
-Applied to 20 TCGA PanCancer Atlas 2018 cohorts via cBioPortal API (n=7,262 tumors). ~639,000 US patients/year estimated eligible under the rule (SEER 2022). Top indications by volume: prostate (125k/yr, 43%), breast (114k/yr, 37%), lung adeno (56k/yr, 43%).
+Applied to 20 TCGA PanCancer Atlas 2018 cohorts (n=8,461 tumors) using Xena pan-cancer Z-scores — same reference frame as the RF model, not per-study centering. ~448,000 US patients/year estimated eligible (SEER 2022). Top by % eligible: liver/HCC (74%), cervical (60%), prostate (60%). Top by absolute volume: prostate (172k/yr), breast (57k/yr), liver (31k/yr), uterus (30k/yr), colorectal (30k/yr).
+
+**Normalization correction:** An earlier estimate using per-study Z-scores gave 639k/yr and showed AML (55%) and sarcoma (54%) as leading indications. Under pan-cancer normalization those collapse to 0% and 1% — correctly, because AML and sarcoma have no C0 oxidative/epithelial program. The C0 criterion is the primary discriminator; C1_sd then selects for phenotypic plasticity within C0-positive tumors.
 
 ### Literature contextualization
 AKT inhibitors have failed in CRC (MK-2206 + selumetinib: 0% ORR, n=21) — but those trials enrolled 52% KRAS-mutant patients with no mesenchymal or amplification stratification. TP53-WT patients in that trial showed 40% ORR (2/5) — a buried signal that the C0 rule recovers by selecting on the underlying biology that TP53-WT was proxying for. KRAS-mutant cell lines respond within our selected leaf — invalidating the KRAS exclusion logic used in prior trials.
 
 ### Proposed trial design
-Phase 2 basket, capivasertib (approved), prostate + lung adeno as lead cohorts, Simon 2-stage, ~80 evaluable patients total. Pre-specified intersection test with PIK3CA/AKT1/PTEN alteration status. Requires 12–18 months of assay development (targeted RNA panel, ~30–50 genes per community, FFPE-calibrated).
+Phase 2 basket, capivasertib (approved), liver/HCC + prostate as lead cohorts, Simon 2-stage, ~80 evaluable patients total. Pre-specified intersection test with PIK3CA/AKT1/PTEN alteration status. Requires 12–18 months of assay development (targeted RNA panel, ~30–50 genes per community, FFPE-calibrated). Liver is the lead biological case (74% eligible, strong C0 + C1_sd coherence); prostate leads by volume and has existing capivasertib safety context.
 
 ---
 
@@ -112,6 +114,7 @@ Yes, if DepMap has a combined KO or single KO chronos score for the target, and 
 | Best-precision leaf precision | 93.8% (15/16 lines) |
 | NNT | 1.07 |
 | CV AUC (RF-guided tree) | 0.739 |
-| TCGA eligible (corrected rule) | ~639,000 pts/yr (US) |
-| Lead indication eligible volumes | Prostate 125k, Breast 114k, Lung adeno 56k |
+| TCGA eligible (harmonized Xena rule) | ~448,000 pts/yr (US) |
+| Lead indication eligible volumes | Prostate 172k, Breast 57k, Liver 31k, Uterus 30k, CRC 30k |
+| Liver HCC % eligible | 74.3% (highest by %) |
 | Capivasertib approval date | November 2023 (HR+/HER2−, PIK3CA/AKT1/PTEN-altered BC) |

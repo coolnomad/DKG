@@ -96,29 +96,43 @@ This does not mean the rule is better than the approved biomarker for breast can
 
 ### TCGA cohort projection
 
-The RF-guided rule (corrected; see below) was applied to 20 TCGA PanCancer Atlas 2018 cohorts (n=7,262 tumors total) via cBioPortal API, using per-indication RNA-seq Z-scores for community members and log2CNA for CCND1 and ERBB2. Missing data were treated as passing (neutral). SEER 2022 annual US incidence was used to convert pass rates to absolute patient estimates.
+The RF-guided rule was applied to 20 TCGA PanCancer Atlas 2018 cohorts (n=8,461 tumor samples) using **Xena pan-cancer Z-scores** (UCSC EB++AdjustPANCAN_IlluminaHiSeq_RNASeqV2, n=11,069 samples as reference) for community expression features, and cBioPortal log2CNA for CCND1 and ERBB2. This normalization matches the reference frame of the RF model training data — all samples Z-scored relative to the same pan-cancer distribution — rather than per-study centering, which inflated eligibility estimates for non-epithelial tumor types. SEER 2022 annual US incidence was used to convert pass rates to absolute patient estimates.
 
-**Corrected rule:** C0_mean > −0.16, CCND1 ≤ 1.14, ERBB2 ≤ 1.14, **C1_sd > 0.76**. An earlier version of this rule had C1_sd ≤ 0.76 (inverted criterion) — that version produced incorrect cohort estimates and has been superseded.
+**Rule:** C0_mean > −0.16, CCND1 ≤ 1.14, ERBB2 ≤ 1.14, **C1_sd > 0.76**
 
-**C1_sd > 0.76** (high mesenchymal program heterogeneity) passes 37–94% by indication. It is permissive in hematopoietic and mesenchymal tumors (AML 94%, sarcoma 94%) and selective in desmoplastic GI tumors (pancreas 37%, stomach 39%), where uniform stromal activation yields low C1 variance.
+**Normalization note:** An earlier analysis using cBioPortal per-study Z-scores estimated ~639,000 pts/yr and showed AML (55%) and sarcoma (54%) as the highest-eligibility indications. Under pan-cancer normalization those indications collapse to 0% and 1% respectively — correctly, because AML and sarcoma have negligible C0 (oxidative/epithelial) program activity relative to the pan-cancer distribution. The per-study version centered every study at zero, making the C0_mean > −0.16 threshold nearly tautological. The pan-cancer estimate is more conservative and more credible.
+
+**Pass rates by criterion (key discriminators):**
+The C0_mean criterion is the primary filter: AML (0% pass C0), sarcoma (2%), melanoma (2%) are eliminated before any other criterion applies. Among epithelial tumors, C0 is near-universally met (84–100%). C1_sd then discriminates within the epithelial group: GI tumors with uniform mesenchymal state pass at low rates (CRC 20%, breast 24%, stomach 19%, lung adeno 20%); tumors with phenotypic plasticity pass at high rates (liver 95%, prostate 62%).
 
 **Top eligible indications by absolute volume:**
 
+| Indication | % Eligible | Est. US patients/yr | %C0 pass | %C1_sd pass |
+|---|---|---|---|---|
+| Prostate | 59.8% | 172,500 | 99% | 62% |
+| Breast | 18.2% | 56,600 | 97% | 24% |
+| Liver (HCC) | 74.3% | 30,900 | 84% | 95% |
+| Uterus/Endometrial | 45.6% | 30,200 | 97% | 52% |
+| Colorectal | 19.5% | 29,900 | 100% | 20% |
+| Head and Neck | 40.2% | 26,700 | 94% | 59% |
+| Bladder | 29.9% | 24,900 | 86% | 45% |
+| Lung (adeno) | 14.7% | 19,100 | 92% | 20% |
+
+**Top indications by % eligible:**
+
 | Indication | % Eligible | Est. US patients/yr |
 |---|---|---|
-| Prostate | 43.4% | 125,100 |
-| Breast | 36.6% | 113,700 |
-| Lung (adeno) | 42.7% | 55,600 |
-| Colorectal | 31.6% | 48,300 |
-| Skin (melanoma) | 47.2% | 47,100 |
-| Kidney (ccRCC) | 45.3% | 37,100 |
-| Uterus | 53.3% | 35,300 |
+| Liver (HCC) | 74.3% | 30,900 |
+| Cervical | 60.3% | 8,300 |
+| Prostate | 59.8% | 172,500 |
+| Biliary/Cholangio | 52.8% | 4,200 |
+| Uterus/Endometrial | 45.6% | 30,200 |
 
-**Total estimated eligible across 20 indications: ~639,000 patients/year (US)**
+**Total estimated eligible across 20 indications: ~448,000 patients/year (US)**
 
-**Biological plausibility caveat for AML and sarcoma (54–56% eligible):** These indications have high C1_sd in TCGA (94% pass rate), but the best-precision cell line leaf contains only 1 sarcoma line and no AML lines. The C0 program's meaning in non-epithelial tumors may differ from its meaning in the epithelial/GI cell lines that define the rule. AML and sarcoma estimates should be treated as exploratory until cell-line-to-patient generalizability is confirmed in those lineages.
+**AML and sarcoma: 0–1% eligible under pan-cancer normalization.** The earlier estimate (54–56%) was an artifact of per-study centering. Under pan-cancer Z-scores the C0 criterion correctly identifies that AML and sarcoma do not express the oxidative/epithelial program. No biological caveat is needed — the normalization fix resolved the anomaly.
 
-**GI tumors drop substantially** relative to the wrong rule (pancreas 47.5% → 18.6%, stomach 38.3% → 18.9%). Desmoplastic GI tumors have uniformly activated stroma — low C1_sd — and therefore fail the C1_sd > 0.76 criterion. This is mechanistically coherent but reduces the GI opportunity significantly compared to the initial (incorrect) estimate.
+**C1_sd bottleneck in CRC (100% C0, 20% C1_sd pass):** Colorectal tumors universally carry the C0 program but mostly have uniform mesenchymal expression state (low within-sample variance). Whether this reflects true biology (committed epithelial/mesenchymal states) or assay characteristics (stromal dilution effects in bulk RNA-seq) is unresolved. A relaxed C1_sd threshold specifically for C0-high GI tumors represents a testable refinement if initial cohort enrollment is limited.
 
 ### Clinical translation
 
@@ -146,7 +160,7 @@ Current AKT inhibitor development is biomarker-agnostic outside of the capivaser
 
 **Drug:** Capivasertib. FDA approval in HR+/HER2− breast cancer (November 2023) de-risks the IND, solves CMC, and establishes the safety profile. A biomarker-expansion study in additional indications is the natural regulatory path.
 
-**Lead indications:** Prostate and lung adenocarcinoma as co-primary cohorts (corrected rule). Prostate leads by absolute eligible volume (43%, 125k/yr); lung adeno provides a distinct solid tumor context with high unmet need in post-SOC lines and strong C0_mean pass rate (71%). Colorectal remains a secondary cohort (32%, 48k/yr) given prior trial experience with AKT inhibitors in CRC and the mechanistic understanding of why prior selection failed.
+**Lead indications:** Liver (HCC) and prostate as co-primary cohorts (harmonized Xena rule). Liver leads by % eligible (74.3%, 30,900 pts/yr) and has the strongest mechanistic coherence: HCC is the prototypically oxidative-metabolism tumor type, PI3K/AKT signaling is frequently activated, and 95% of liver tumors pass the C1_sd criterion (phenotypic plasticity). Prostate leads by absolute volume (172,500 pts/yr, 59.8% eligible) with near-universal C0 expression and established capivasertib safety data in the prostate context. Colorectal is a secondary cohort (19.5%, 29,900 pts/yr) — the C1_sd bottleneck warrants a relaxed threshold exploration, and the prior CRC trial experience provides mechanistic context. Lung adenocarcinoma is deprioritized (14.7%, 19,100 pts/yr) relative to the previous estimate (42.7%) — the reduction comes from low C1_sd pass rates in lung adeno (20%).
 
 **Design:** Multi-cohort Simon 2-stage, single-arm, ORR primary endpoint. Biomarker composite assessed at enrollment as gate. Enroll 15 per cohort → if ≥3 responses continue to 40 total → require ≥9/40 to declare signal (targeting 30–35% ORR vs. 12–15% null at 80% power, ~35–40 evaluable per cohort, ~80 total across two indications).
 

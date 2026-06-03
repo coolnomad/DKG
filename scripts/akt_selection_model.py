@@ -50,7 +50,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import (roc_auc_score, precision_score, recall_score,
                              classification_report)
-from sklearn.inspection import permutation_importance
+from sklearn.feature_selection import VarianceThreshold
 
 # ── paths ─────────────────────────────────────────────────────────────────────
 CHRONOS_PATH  = "data/processed/chronos_filtered.feather"
@@ -135,6 +135,61 @@ def align(df: pl.DataFrame, id_col: str,
 
 
 # ── leaf analysis ─────────────────────────────────────────────────────────────
+
+def variance_filter(X: np.ndarray, feat_names: list[str],
+                    modality_sizes: dict[str, int],
+                    var_threshold: float = 0.01,
+                    min_binary_count: int = 8) -> tuple[np.ndarray, list[str]]:
+    """
+    Remove near-zero-variance features.
+    - Continuous features (community, CN): drop if variance < var_threshold
+    - Binary features (hotspot, damaging): drop if fewer than min_binary_count
+      positive cases (i.e. sum < min_binary_count), which for n=265 ≈ 3%
+    Returns filtered X and feature names, and prints a per-modality summary.
+    """
+    n_comm = modality_sizes["comm"]
+    n_cn   = modality_sizes["cn"]
+    n_hot  = modality_sizes["hot"]
+    n_dam  = modality_sizes["dam"]
+
+    keep = []
+    for i, name in enumerate(feat_names):
+        col = X[:, i]
+        if i < n_comm + n_cn:
+            # continuous: variance threshold
+            keep.append(col.var() >= var_threshold)
+        else:
+            # binary mutation: minimum positive count
+            keep.append(col.sum() >= min_binary_count)
+
+    keep = np.array(keep)
+    X_filt = X[:, keep]
+    names_filt = [n for n, k in zip(feat_names, keep) if k]
+
+    # per-modality report
+    bounds = [
+        ("Community (expr)", 0,                    n_comm),
+        ("CN segments",      n_comm,                n_comm + n_cn),
+        ("Hotspot mut",      n_comm + n_cn,         n_comm + n_cn + n_hot),
+        ("Damaging mut",     n_comm + n_cn + n_hot, len(feat_names)),
+    ]
+    print(f"\n  Variance filter (continuous var>={var_threshold}, "
+          f"binary sum>={min_binary_count}):")
+    for label, lo, hi in bounds:
+        total  = hi - lo
+        kept   = keep[lo:hi].sum()
+        removed = total - kept
+        print(f"    {label:<22}: {kept:>4}/{total}  removed {removed}")
+    print(f"  Total: {X_filt.shape[1]}/{X.shape[1]} features kept")
+
+    # report removed features (informative for debugging)
+    removed_names = [n for n, k in zip(feat_names, keep) if not k]
+    if removed_names:
+        print(f"  Removed: {', '.join(removed_names[:20])}"
+              + ("..." if len(removed_names) > 20 else ""))
+
+    return X_filt, names_filt
+
 
 def leaf_summary(tree: DecisionTreeClassifier, X: np.ndarray,
                  y: np.ndarray, cell_lines: list[str],
@@ -228,6 +283,11 @@ def main():
     X          = np.hstack([comm_feat, cn_feat, hot_feat, dam_feat])
     feat_names = comm_names + cn_names + hot_names + dam_names
     print(f"  Feature matrix: {X.shape[0]} x {X.shape[1]}")
+
+    # ── variance filter ───────────────────────────────────────────────────────
+    modality_sizes = {"comm": len(comm_names), "cn": len(cn_names),
+                      "hot": len(hot_names),   "dam": len(dam_names)}
+    X, feat_names = variance_filter(X, feat_names, modality_sizes)
 
     # save feature matrix
     feat_df = pl.DataFrame({chron_id: cell_lines, "responder": y.tolist()})
@@ -330,9 +390,8 @@ def main():
     summary = [
         f"AKT1_AKT2 selection model — CV summary",
         f"cutoff={cut}  n={len(y)}  responders={y.sum()}  ({100*y.mean():.1f}%)",
-        f"features: {len(feat_names)} "
-        f"({len(comm_names)} expr-community, {len(cn_names)} CN, "
-        f"{len(hot_names)} hotspot, {len(dam_names)} damaging)",
+        f"features after variance filter: {len(feat_names)} "
+        f"(from {len(comm_names)+len(cn_names)+len(hot_names)+len(dam_names)} raw)",
         f"",
         f"Decision tree (depth={args.tree_depth}, min_leaf={args.min_leaf}):",
         f"  Train precision={train_prec:.3f}  recall={train_rec:.3f}",

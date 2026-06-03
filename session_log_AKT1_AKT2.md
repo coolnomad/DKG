@@ -888,3 +888,50 @@ Three responders carry KRAS hotspot mutations (SW 1573, Lu-65, OVK18). The MK-22
 
 **5. The false positive (CCLF_UPGI_0025_T) remains unexplained.**
 TP53-mutant, KRAS-WT, PIK3CA-WT, esophagogastric adenocarcinoma. Chronos = -0.14 (barely non-essential). No clear genomic escape mechanism identified from the features available. Candidate explanations: alternative survival pathway active at baseline (e.g., YAP/TAZ, NF-κB), stromal support absent in vivo, or a threshold effect near the chronos -0.5 boundary.
+
+---
+
+## AKT3-low as sole criterion: TCGA cohort comparison
+
+**Question:** What would cohort sizes look like if AKT3-low expression were the sole eligibility criterion, rather than the 4-criterion rule?
+
+**Method:** AKT3 RNA-seq Z-scores (pan-cancer reference, `_rna_seq_v2_mrna_median_all_sample_Zscores`) fetched from cBioPortal for all 20 TCGA studies (n=8,253 total samples). Two thresholds evaluated:
+- Z < 0: below pan-cancer median (~50th percentile by definition)
+- Z < −0.818: below pan-cancer 20th percentile (computed from the combined 8,253-sample distribution)
+
+### Results
+
+| Criterion | Total est. pts/yr | Indication pass rate range |
+|---|---|---|
+| AKT3 Z < 0 (median) | **~785k** | 42–54% across all indications |
+| AKT3 Z < −0.82 (bottom 20%) | **~312k** | 16–25% across all indications |
+| 4-criterion RF rule (corrected) | **~639k** | 19–57% across all indications |
+
+### Per-indication detail (bottom 20% threshold, Z < −0.82)
+
+| Indication | n | Pass | % | Est. pts/yr |
+|---|---|---|---|---|
+| Breast | 1082 | 210 | 19.4% | 60,306 |
+| Colorectal | 592 | 131 | 22.1% | 33,861 |
+| Lung (adeno) | 510 | 100 | 19.6% | 25,490 |
+| Prostate | 493 | 78 | 15.8% | 45,613 |
+| Skin (melanoma) | 443 | 89 | 20.1% | 20,046 |
+| Kidney (ccRCC) | 510 | 85 | 16.7% | 13,633 |
+| Uterus | 527 | 108 | 20.5% | 13,567 |
+| Bladder | 407 | 82 | 20.1% | 16,761 |
+| Head and Neck | 515 | 109 | 21.2% | 14,068 |
+| AML | 173 | 43 | 24.9% | 5,170 |
+| Pancreas | 177 | 31 | 17.5% | 11,636 |
+| Sarcoma | 253 | 48 | 19.0% | 2,578 |
+
+**Total (bottom 20%): ~312,000 pts/yr**
+
+### Key finding: AKT3 percentile cuts produce a flat indication landscape
+
+Any fixed percentile threshold on AKT3 expression selects a nearly identical fraction of every indication (16–25% at the 20th percentile). There is no biological discrimination across tumor types — pancreas, melanoma, AML, and prostate are all within a few percentage points of each other. This is a mathematical consequence of applying a fixed quantile to a continuous distribution: you're not selecting on biology, you're selecting on rank.
+
+By contrast, the 4-criterion rule's pass rates vary from 19% (pancreas) to 57% (uterine) based on indication-specific biology — desmoplastic GI tumors fail C1_sd > 0.76 at high rates, epithelial/gynecologic tumors pass more often. That variation is the signal that allows indication prioritization for a basket trial.
+
+**Practical implication:** A trial enrolling on AKT3-low alone (even bottom 20%) would have no basis for prioritizing one indication over another, no mechanistic narrative for why those tumors in particular should respond, and an expected ORR close to the base rate of AKT1/AKT2 dependency in unselected tumors (~27% of cell lines are strong responders at chronos ≤ −0.7). That is likely insufficient to see a signal in a 35–40-patient Simon 2-stage cohort unless the true ORR happens to be high by chance.
+
+AKT3-low is a necessary but not sufficient condition for AKT1/AKT2 dependency — it rules out tumors with a functional escape route but does not identify the positive biology (active oxidative program, mesenchymal program state) that characterizes the truly dependent cells.

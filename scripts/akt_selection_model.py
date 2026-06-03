@@ -221,6 +221,8 @@ def main():
     parser.add_argument("--tree-depth", type=int,   default=4)
     parser.add_argument("--min-leaf",   type=int,   default=15)
     parser.add_argument("--rf-trees",   type=int,   default=500)
+    parser.add_argument("--rf-select",  type=int,   default=10,
+                        help="Fit a second RF-guided tree on top-N RF features (0=skip)")
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -386,6 +388,69 @@ def main():
     plt.close(fig)
     print(f"RF importance figure -> {OUT_DIR}/rf_importances.png")
 
+    # ── RF-guided tree ────────────────────────────────────────────────────────
+    rf_tree_summary = []
+    if args.rf_select > 0:
+        top_n = args.rf_select
+        print(f"\nFitting RF-guided tree on top-{top_n} RF features ...")
+
+        top_feats   = imp_df.head(top_n)["feature"].to_list()
+        top_idx     = [feat_names.index(f) for f in top_feats]
+        X_top       = X[:, top_idx]
+
+        print(f"  Features: {', '.join(top_feats)}")
+
+        rf_tree = DecisionTreeClassifier(
+            max_depth=args.tree_depth,
+            min_samples_leaf=args.min_leaf,
+            class_weight="balanced",
+            random_state=42,
+        )
+        rf_tree.fit(X_top, y)
+
+        rt_prec = precision_score(y, rf_tree.predict(X_top), zero_division=0)
+        rt_rec  = recall_score(y, rf_tree.predict(X_top), zero_division=0)
+        cv_rt   = cross_val_score(rf_tree, X_top, y, cv=cv, scoring="roc_auc")
+        print(f"  Train precision={rt_prec:.3f}  recall={rt_rec:.3f}")
+        print(f"  5-fold CV AUC: {cv_rt.mean():.3f} ± {cv_rt.std():.3f}")
+
+        rt_rules = export_text(rf_tree, feature_names=top_feats)
+        (OUT_DIR / "rf_tree_rules.txt").write_text(rt_rules, encoding="utf-8")
+        print(f"\n{rt_rules}")
+
+        rt_leaves = leaf_summary(rf_tree, X_top, y, cell_lines, top_feats)
+        rt_leaves.write_csv(str(OUT_DIR / "rf_tree_leaves.csv"))
+        print("Leaf summary (sorted by precision):")
+        print(f"{'leaf':>6} {'N':>5} {'N_resp':>7} {'prec':>6} {'rec':>6}")
+        for row in rt_leaves.iter_rows(named=True):
+            print(f"  {row['leaf_id']:>4}  {row['n']:>5}  {row['n_responder']:>7}"
+                  f"  {row['precision']:>6.3f}  {row['recall']:>6.3f}")
+
+        # figure
+        fig, ax = plt.subplots(figsize=(16, 7))
+        plot_tree(rf_tree, feature_names=top_feats,
+                  class_names=["non-resp", "responder"],
+                  filled=True, rounded=True, ax=ax, fontsize=8,
+                  impurity=False, proportion=True)
+        fig.suptitle(
+            f"AKT1_AKT2 RF-guided tree — top {top_n} RF features "
+            f"(depth {args.tree_depth}, chronos ≤ {cut})",
+            fontsize=10, fontweight="bold"
+        )
+        fig.tight_layout()
+        fig.savefig(str(OUT_DIR / "rf_tree_figure.png"), dpi=180, bbox_inches="tight")
+        plt.close(fig)
+        print(f"RF-guided tree figure -> {OUT_DIR}/rf_tree_figure.png")
+
+        rf_tree_summary = [
+            f"",
+            f"RF-guided tree (top {top_n} RF features, depth={args.tree_depth}, "
+            f"min_leaf={args.min_leaf}):",
+            f"  Features: {', '.join(top_feats)}",
+            f"  Train precision={rt_prec:.3f}  recall={rt_rec:.3f}",
+            f"  5-fold CV AUC: {cv_rt.mean():.3f} ± {cv_rt.std():.3f}",
+        ]
+
     # ── CV summary ────────────────────────────────────────────────────────────
     summary = [
         f"AKT1_AKT2 selection model — CV summary",
@@ -393,14 +458,14 @@ def main():
         f"features after variance filter: {len(feat_names)} "
         f"(from {len(comm_names)+len(cn_names)+len(hot_names)+len(dam_names)} raw)",
         f"",
-        f"Decision tree (depth={args.tree_depth}, min_leaf={args.min_leaf}):",
+        f"Decision tree (depth={args.tree_depth}, min_leaf={args.min_leaf}) — all features:",
         f"  Train precision={train_prec:.3f}  recall={train_rec:.3f}",
         f"  5-fold CV AUC: {cv_aucs.mean():.3f} ± {cv_aucs.std():.3f}",
         f"",
         f"Random forest ({args.rf_trees} trees, min_leaf=5):",
         f"  OOB AUC: {oob_auc:.3f}",
         f"  5-fold CV AUC: {cv_rf.mean():.3f} ± {cv_rf.std():.3f}",
-    ]
+    ] + rf_tree_summary
     (OUT_DIR / "cv_summary.txt").write_text("\n".join(summary), encoding="utf-8")
     print("\n" + "\n".join(summary))
 

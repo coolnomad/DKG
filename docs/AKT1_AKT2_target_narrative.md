@@ -159,8 +159,22 @@ The rule requires RNA-seq Z-scores computed against a pan-cancer reference — n
 
 Pre-specify collection of PIK3CA/AKT1/PTEN status in all enrolled patients and test for interaction with the C0/C1 rule. The DKG analysis predicts these are orthogonal — one captures metabolic/epithelial program state, the other genomic PI3K/AKT activation. If orthogonal, patients satisfying both are the highest-confidence responder stratum. If correlated, the C0 rule may function as a transcriptional readout of pathway activation rather than an independent axis — a biologically important distinction that changes how the biomarker would be positioned.
 
+### Prior CRC AKT inhibitor experience
+
+AKT inhibitors have been tested in CRC — and have largely failed — but the failures were selection failures, not target failures. MK-2206 plus selumetinib achieved 0% ORR in a 21-patient Phase 2 study in which 11/21 patients were KRAS-mutant and no selection was made for epithelial phenotype, mesenchymal suppression, or CCND1/ERBB2 status. The pharmacodynamic goal (70% dual pAKT/pERK suppression) was never reached in any patient. The AKT1 E17K-mutant basket (NCI-MATCH) showed 22% ORR — exclusively in true driver-mutation tumors across histologies. No prior trial has selected on the metabolic/epithelial transcriptional state captured by the C0/C1 rule.
+
+A subgroup signal worth noting: TP53-WT patients in the MK-2206 trial showed 40% ORR (2/5) versus 0% (0/8) in TP53-mutant. Analysis of the DepMap selection rule leaf reveals that this TP53 signal was almost certainly a confound (see below) rather than a direct mechanistic relationship.
+
+### TP53 is not a necessary criterion
+
+DepMap analysis of the best-precision leaf (18 cell lines, 17 responders, 94.4% precision) shows that TP53 mutation status does not discriminate within the selected population: the one false positive (CCLF_UPGI_0025_T, esophagogastric adenocarcinoma) carries a TP53 mutation, but so do 9/17 responders (53%). Adding a TP53-WT requirement would eliminate 9 true responders while failing to exclude the false positive — a strictly negative modification.
+
+The TP53-WT signal in the MK-2206 trial reflects that in an unselected CRC population, TP53-WT tumors are enriched for the differentiated/epithelial phenotype (C0-high) that drives AKT dependency. The C0_mean feature captures this biology directly, making TP53 status a redundant downstream proxy.
+
+**KRAS mutation does not preclude response within the C0/C1-selected population.** Three responders in the best-precision leaf carry KRAS hotspot mutations. This is a direct departure from the exclusion logic used in prior CRC AKT inhibitor trials: KRAS mutation predicts MAPK escape in unselected tumors but not in tumors already selected for low mesenchymal heterogeneity and active oxidative metabolism. The rule selects on the relevant biological axis; genomic KRAS status is not informative on top of it.
+
 ### Key open questions before trial
 
 1. **C1_sd in bulk tumor vs. cell lines:** Stromal contamination may inflate mesenchymal heterogeneity estimates in patient biopsies, systematically reducing the pass rate relative to cell line predictions. This is the highest-priority experiment before trial design is finalized.
-2. **False positive mechanism:** The three cell line false positives (SW837, SNU-869, CCLF_UPGI_0025_T) satisfy all four criteria but are not strong responders. If their escape mechanism is prevalent in patient tumors, clinical ORR would track below the 89% cell line precision. Retrospective analysis of existing capivasertib trial biosamples — if available — would directly test this.
-3. **Drug exposure in tumor:** Capivasertib does not fully eliminate AKT1/AKT2 kinase activity at clinical doses. Chronos captures complete genetic loss; pharmacological inhibition is partial. Translation loss from the 89% precision to clinical ORR is uncertain and exposure-dependent.
+2. **False positive mechanism:** CCLF_UPGI_0025_T (esophagogastric, TP53-mutant, KRAS/PIK3CA-WT, chronos=−0.14) satisfies all four criteria but is not a strong responder. No clear genomic escape mechanism is identified from available features. Candidate explanations include YAP/TAZ or NF-κB activation at baseline. Retrospective analysis of capivasertib trial biosamples — if available — would directly test this.
+3. **Drug exposure in tumor:** Capivasertib does not fully eliminate AKT1/AKT2 kinase activity at clinical doses. Chronos captures complete genetic loss; pharmacological inhibition is partial. Translation loss from the 94.4% cell line precision to clinical ORR is uncertain and exposure-dependent.

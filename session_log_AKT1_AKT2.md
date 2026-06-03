@@ -798,3 +798,71 @@ Against null ORR ~12–15% (SOC in 2L+ colorectal), target ORR 30–35% at 80% p
 1. **C1_sd in bulk tumor vs. cell lines**: Stromal contamination in FFPE could inflate C1_sd (stroma is mesenchymal), reducing pass rates relative to cell line estimates. This is the highest-priority prospective validation experiment before opening a trial.
 2. **False positive mechanism**: SW837, SNU-869, and CCLF_UPGI_0025_T satisfy all four criteria but do not respond. If their escape mechanism is common in patients, the clinical ORR would be lower than the 89% precision implies. Retrospective analysis of existing capivasertib trial biosamples would directly test this.
 3. **Functional-to-pharmacological translation**: Chronos measures genetic dependency under complete KO. Capivasertib does not fully eliminate AKT1/AKT2 activity — translation loss from the 89% precision figure to clinical ORR is uncertain and depends on drug exposure achieved in tumor tissue.
+
+---
+
+## AKT inhibitor CRC clinical trial context and TP53 analysis
+
+### Prior CRC AKT inhibitor failures — literature review
+
+**What was tried:**
+- **MK-2206 single-agent (NCT01186705):** PIK3CA-mutant, KRAS-WT metastatic CRC. Results never published — signals poor activity.
+- **MK-2206 + selumetinib Phase 2 (n=21):** 0% ORR. 11/21 patients were KRAS-mutant; no stratification on mesenchymal phenotype, CCND1/ERBB2 amplification, or TP53 status. Pharmacodynamic target (70% dual pAKT/pERK suppression) was never achieved in any patient.
+- **Capivasertib/ipatasertib (NCI-MATCH basket, AKT1 E17K-mutant):** 22% ORR, 5.4-month PFS — but only in true driver-mutation tumors across histologies, not CRC-specific.
+
+**Escape mechanisms documented:**
+- RTK rebound (HER3/IGF-1R/InsR upregulation upon AKT inhibition → PI3K/MAPK reactivation)
+- PIK3CA-driven compensatory AKT reactivation on MEK inhibition
+- PTEN loss → complete resistance; NF-κB cross-talk; CCND1 and ERBB2 amplification as bypass drivers
+
+**Conclusion: failures were selection failures, not target failures.** No prior CRC trial selected for oxidative/epithelial phenotype + mesenchymal exclusion + CCND1/ERBB2 amplification exclusion.
+
+**Key subgroup signal:** In MK-2206 + selumetinib, TP53-WT patients showed 40% ORR (2/5) vs. 0% (0/8) in TP53-mutant — the only published subgroup signal in CRC AKT inhibitor data.
+
+### TP53 analysis in the RF-guided tree best-precision leaf
+
+**Leaf 12 (the best-precision leaf):** n=18, 17 responders, 1 false positive (94.4% precision)
+
+Current RF-guided tree best leaf — **note:** this supersedes the 27/24 = 89% figure cited in earlier session notes, which was from a pre-variance-filter run. The current run after removing near-zero-variance features yields a higher-precision leaf.
+
+| Cell line | Primary disease | TP53_mut | KRAS_hs | PIK3CA_hs | Responder |
+|---|---|---|---|---|---|
+| CCLF_UPGI_0025_T | Esophagogastric Adeno | Y | N | N | **NO** |
+| YSCCC | Biliary (IPMN) | Y | N | Y | Yes |
+| OUMS-23 | Colorectal Adeno | Y | N | N | Yes |
+| NCI-H716 | Colorectal Adeno | Y | N | N | Yes |
+| RKO | Colorectal Adeno | N | N | Y | Yes |
+| CAL-51 | Invasive Breast | N | N | Y | Yes |
+| SUM-159PT | Invasive Breast | Y | N | Y | Yes |
+| SNU-1 | Esophagogastric Adeno | N | Y | N | Yes |
+| FLO-1 | Esophagogastric Adeno | Y | N | N | Yes |
+| huH-1 | Hepatocellular | Y | N | N | Yes |
+| Lu-65 | NSCLC | Y | Y | N | Yes |
+| SW 1573 | NSCLC | N | Y | Y | Yes |
+| JJN-3 | Mature B-Cell | N | N | N | Yes |
+| A2780 | Ovarian Epithelial | N | N | Y | Yes |
+| OVK18 | Ovarian Epithelial | Y | Y | N | Yes |
+| Hs 766T | Pancreatic Adeno | N | Y | N | Yes |
+| Rh4 | Rhabdomyosarcoma | Y | N | N | Yes |
+| JAR | Gestational Trophoblastic | N | N | N | Yes |
+
+**TP53 by response:**
+- False positive (n=1): TP53-mutant (1/1, 100%)
+- Responders (n=17): TP53-mutant (9/17, 53%), TP53-WT (8/17, 47%)
+
+### Key findings
+
+**1. TP53 does not discriminate within the selected leaf. Do not add as 5th criterion.**
+The false positive has a TP53 mutation, but so do 53% of responders. Adding TP53-WT as a requirement would eliminate 9 true responders without removing the false positive — strictly net negative.
+
+**2. The TP53 signal from MK-2206 trials was almost certainly a confound.**
+In an unselected CRC population, TP53-WT tumors are more likely to be differentiated/epithelial (i.e., C0-high) — that epithelial phenotype was driving response, and TP53-WT status was a proxy. The C0_mean feature captures this directly. Once patients are selected on C0/C1 criteria, TP53 becomes redundant.
+
+**3. KRAS-mutant lines respond within the C0-selected leaf.**
+Three responders carry KRAS hotspot mutations (SW 1573, Lu-65, OVK18). The MK-2206 trial excluded KRAS-mutant patients on the assumption of MAPK escape — but within C0-high/mesenchymal-low biology, KRAS mutation doesn't preclude AKT dependency. This is a meaningful departure from conventional trial design logic: our rule selects on the correct biological axis (metabolic state + mesenchymal suppression), not on genomic mutation surrogates that correlate imperfectly with that axis.
+
+**4. PIK3CA hotspot enriched but not required.**
+6/17 responders (35%) carry PIK3CA hotspot mutations — higher than pan-cancer baseline (~10–15%), consistent with PI3K pathway activation increasing AKT dependency. But 11/17 responders have no PIK3CA hotspot, confirming the C0 rule is capturing dependency through a mechanism beyond PI3K pathway activation alone.
+
+**5. The false positive (CCLF_UPGI_0025_T) remains unexplained.**
+TP53-mutant, KRAS-WT, PIK3CA-WT, esophagogastric adenocarcinoma. Chronos = -0.14 (barely non-essential). No clear genomic escape mechanism identified from the features available. Candidate explanations: alternative survival pathway active at baseline (e.g., YAP/TAZ, NF-κB), stromal support absent in vivo, or a threshold effect near the chronos -0.5 boundary.

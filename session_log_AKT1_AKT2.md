@@ -658,3 +658,26 @@ python scripts/akt_selection_model.py --cutoff -0.7 --tree-depth 4 --min-leaf 15
 ```
 
 Prerequisites: chronos_filtered.feather, xp_filtered.feather, cn_segments.feather, hotspot_matrix.feather, damaging_matrix.feather, output/AKT1_AKT2_full/xx/communities.parquet
+
+### Clinical translation of the high-precision leaf
+
+**Key numbers:**
+- Selected by rule: 27/265 cell lines = **10.2% of panel**
+- Precision: 24/27 = **89%** strong responders within selected group
+- Recall: 24/75 = **32%** of all strong responders captured
+- False positives among non-responders: 3/190 = **1.6%**
+- Number needed to treat (NNT): 27/24 = **1.125** — treat 1.125 patients to get 1 strong responder
+
+**Interpretation:** If this rule maps to patients, applying C0-high + CCND1-unamplified + chr1p-intact as an eligibility criterion would enrich for a high-confidence responder subgroup covering ~1/3 of all patients who could benefit, with very low off-target assignment (1.6% of non-responders mistakenly treated). Precision (89%) is the clinically actionable metric — within the treated group, 11% would not respond strongly.
+
+**Caveats:**
+
+1. **Cell line panel composition ≠ patient population.** The 10.2% prevalence figure is derived from a panel that overrepresents GI tumors (esophagogastric, biliary, colorectal) relative to real-world cancer incidence. These indications are enriched in the selected leaf. The true addressable fraction in an unselected patient population is likely smaller than 10%. Precision (89%) is more portable across datasets than the prevalence estimate.
+
+2. **Expression leakage in community construction.** The XX co-expression communities were derived from the same cell lines used to train the model. While the community structure itself does not use the AKT1_AKT2 target variable, the gene membership was influenced by the expression covariance structure of this specific panel. Validation in an independent cohort (e.g., CCLE expression + drug response data, or patient tumor RNA-seq + clinical response) would be needed to confirm rule portability.
+
+3. **n=265 is small for a 380-feature model.** The decision tree is heavily depth-constrained (depth=4, min_leaf=15) to prevent overfitting, and the RF uses OOB estimation. CV AUC (0.758) is meaningfully below OOB AUC (0.774), suggesting some optimism in the OOB estimate. The specific thresholds in the tree rule (C0_mean > -0.16, CCND1 seg ≤ 1.14) should be treated as approximate — they may shift in a larger or independent dataset.
+
+4. **Chronos ≤ -0.7 threshold is functional, not clinical.** Cell line CRISPR chronos scores do not map directly to clinical response to capivasertib or other AKT inhibitors. The threshold defines a strong functional dependency in the genetic perturbation context. Translation to drug response requires the assumption that functional genetic dependency predicts pharmacological sensitivity — well-supported but not guaranteed.
+
+5. **The 3 false positives are not random.** SW837 (colorectal, -0.63), SNU-869 (ampullary, -0.33), and CCLF_UPGI_0025_T (esophagogastric, -0.14) all fall in the GI cluster and satisfy the C0/CN criteria, but are not strong responders. They may represent tumors with additional escape mechanisms not captured by the current feature set (e.g., downstream pathway bypass, alternative survival signaling). Characterizing what makes them escape despite satisfying the rule would sharpen the biomarker further.

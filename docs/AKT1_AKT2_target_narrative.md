@@ -92,6 +92,20 @@ The 24 confirmed responders span: esophagogastric adenocarcinoma (6), ovarian ep
 
 This does not mean the rule is better than the approved biomarker for breast cancer — it means the two selection strategies are identifying different patient populations. The C0-high, CCND1-unamplified rule describes a precision stratum currently outside any approved indication, with a mechanistic basis (oxidative metabolism + epithelial identity + no cyclin D1 bypass) that is distinct from the PIK3CA/AKT1/PTEN genomic activation framework underlying capivasertib's approval.
 
+### Clinical translation
+
+Applied to the cell line panel: the rule selects 27/265 lines (10.2%), of which 24 are strong responders — a precision of 89% and a number needed to treat of 1.125. The rule captures 24/75 (32%) of all strong responders. False positive assignment among non-responders is 3/190 (1.6%).
+
+Several caveats govern translation to patients:
+
+**Panel composition bias.** The 10.2% prevalence is derived from a cell line panel that overrepresents GI tumors relative to real-world incidence. Esophagogastric and biliary cancers are common in the selected leaf but are rare cancers in the population. The precision estimate (89%) is more portable across datasets than the prevalence estimate, which will shift substantially in a population-weighted setting.
+
+**Functional-to-pharmacological translation.** Chronos scores measure genetic dependency under complete gene knockout, not drug response. The assumption that functional genetic dependency predicts pharmacological sensitivity to capivasertib or other AKT inhibitors is well-supported by concordance between CRISPR screens and drug response data broadly, but is not guaranteed for this specific rule.
+
+**Model scale and validation requirement.** With n=265 and 380 features, the tree is constrained at depth=4 with min_samples_leaf=15 to limit overfitting. CV AUC (0.758) is lower than OOB AUC (0.774), indicating some residual optimism. The specific numeric thresholds in the rule should be treated as approximate — they require validation in an independent cohort (e.g., patient tumor RNA-seq paired with drug response or survival data) before clinical use.
+
+**The three false positives are informative.** SW837 (colorectal, chronos=−0.63), SNU-869 (ampullary, −0.33), and CCLF_UPGI_0025_T (esophagogastric, −0.14) satisfy all three criteria but are not strong responders. They likely harbor additional escape mechanisms outside the current feature space. Characterizing what distinguishes them from true responders within the same rule stratum is the most direct path to refining precision further.
+
 ## Competitive differentiation
 
 Current AKT inhibitor development is biomarker-agnostic outside of the capivasertib genomic panel, and no approved or late-stage compound incorporates paralog expression as a selection criterion. The AKT3 biomarker is mechanistically grounded, measurable from standard RNA-seq, and prospectively stratifies the population that functional genomics predicts will respond. Pairing it with mesenchymal exclusion adds a second independent filter against intrinsic resistance. This two-biomarker framework converts a broadly active but heterogeneously effective drug class into a precision strategy with a defined, testable patient hypothesis.

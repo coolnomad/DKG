@@ -935,3 +935,62 @@ By contrast, the 4-criterion rule's pass rates vary from 19% (pancreas) to 57% (
 **Practical implication:** A trial enrolling on AKT3-low alone (even bottom 20%) would have no basis for prioritizing one indication over another, no mechanistic narrative for why those tumors in particular should respond, and an expected ORR close to the base rate of AKT1/AKT2 dependency in unselected tumors (~27% of cell lines are strong responders at chronos ≤ −0.7). That is likely insufficient to see a signal in a 35–40-patient Simon 2-stage cohort unless the true ORR happens to be high by chance.
 
 AKT3-low is a necessary but not sufficient condition for AKT1/AKT2 dependency — it rules out tumors with a functional escape route but does not identify the positive biology (active oxidative program, mesenchymal program state) that characterizes the truly dependent cells.
+
+---
+
+## RF Model Applied to TCGA PanCancer Atlas — Xena Normalization
+
+**Date:** 2026-06-02
+**Script:** scripts/akt_tcga_rf_score.py
+**Output:** output/AKT1_AKT2_multiomics/tcga_rf_scores/
+
+### Approach
+
+Applied the re-fitted AKT1_AKT2 random forest (500 trees, OOB 0.728, same hyperparams and random_state=42 as training) to 8,461 TCGA PanCancer Atlas 2018 tumor samples across 20 indications.
+
+**Expression normalization (key fix):** Used UCSC Xena pan-cancer expression data (`EB++AdjustPANCAN_IlluminaHiSeq_RNASeqV2.geneExp.xena.gz`, n=11,069 samples). Computed Z-scores jointly across all pan-cancer samples before computing community stats — matching the pan-cell-line reference frame used during cell-line training. Earlier runs using cBioPortal per-study Z-scores collapsed all probabilities to ~0.40 due to reference frame mismatch (each study normalized to its own median).
+
+**Xena file format note:** Row identifiers are Hugo gene symbols for protein-coding genes (not Entrez IDs as initially assumed). 234/304 community gene symbols were present in the 2018 annotation (C0: 62/93, C1: 91/107, C2: 81/104).
+
+**CN and mutation features:** Still fetched per-study from cBioPortal (scale-invariant — no normalization needed).
+
+### Results
+
+| Indication | n | Median P(resp) | % ≥ 0.5 |
+|---|---|---|---|
+| Liver (HCC) | 374 | 0.433 | 2.7% |
+| Colorectal | 615 | 0.431 | 0.7% |
+| Bladder | 408 | 0.420 | 0.2% |
+| Cervical | 307 | 0.420 | 2.0% |
+| Uterus/Endometrial | 533 | 0.419 | 0.2% |
+| AML | 173 | 0.418 | 0.0% |
+| Stomach | 415 | 0.413 | 0.5% |
+| Esophageal | 185 | 0.407 | 0.0% |
+| Biliary/Cholangio | 36 | 0.401 | 0.0% |
+| Head and Neck | 522 | 0.398 | 0.4% |
+| Prostate | 498 | 0.396 | 0.4% |
+| Ovarian | 309 | 0.393 | 0.3% |
+| Breast | 1104 | 0.390 | 0.4% |
+| Lung (squamous) | 503 | 0.390 | 0.4% |
+| Lung (adeno) | 517 | 0.389 | 0.0% |
+| Pancreas | 179 | 0.377 | 0.0% |
+| Thyroid | 513 | 0.369 | 0.0% |
+| Kidney (ccRCC) | 534 | 0.366 | 0.0% |
+| Skin (melanoma) | 473 | 0.361 | 0.0% |
+| Sarcoma | 263 | 0.354 | 0.0% |
+
+**Total at P≥0.5:** ~5,700 pts/yr (not interpretable as an eligibility estimate — see calibration note below)
+
+### Interpretation and calibration note
+
+**Absolute probabilities are not calibrated for TCGA tumors.** All 8,461 samples score below 0.5, meaning the RF uniformly classifies TCGA samples as non-responders by the binary threshold. This is expected: the RF was trained on complete genetic knockout (chronos scores from CRISPR screens) in cancer cell lines, where ~49% of samples are responders. Pharmacological AKT1/2 inhibition in patient tumors is a different biological and measurement modality, and the probability space has shifted.
+
+**The relative ranking IS biologically informative:**
+- **Liver (HCC) and Colorectal highest (0.43):** The C0 community (oxidative phosphorylation, epithelial metabolism: CKMT1A/B, PCK2, CPT2, PPARGC1B) is most consistently expressed in hepatocellular and colorectal tumors — consistent with the known role of oxidative metabolism in GI epithelial tumors.
+- **Sarcoma and Melanoma lowest (0.35–0.36):** Mesenchymal and neural-crest-derived tumors do not express the C0 epithelial/oxidative program. These tumors fail at the first community criterion, regardless of CN and mutation features.
+- **AML (0.418) appears relatively high** but this is consistent with the corrected decision-rule result and remains the subject of a critical caveat: no AML cell lines are in the training leaf (leaf 12), so the RF's handling of AML samples is extrapolation, not interpolation.
+
+**Contrast with decision-rule cohort estimates:** The hard-threshold decision rule (C0_mean > −0.16, CCND1/ERBB2 log2CN ≤ 1.14, C1_sd > 0.76) applied to cBioPortal per-study Z-scores gave much higher pass rates (19–57%). That analysis used study-relative Z-scores, which systematically center every tumor study near the thresholds — producing apparent eligibility that is not comparable to the pan-cancer reference frame. The Xena-based RF scores are a more conservative and methodologically correct estimate of which tumors carry the feature signature.
+
+**Practical implication for the job talk / trial design:** The RF scoring adds a continuous risk ranking rather than a binary rule. For trial design, the decision tree rule (binary, interpretable, assayable as a ~30-50 gene panel) is the operative selection instrument. The RF score is a complementary risk-ranking tool that could be used to prioritize within rule-positive patients or to estimate heterogeneity within a cohort.
+

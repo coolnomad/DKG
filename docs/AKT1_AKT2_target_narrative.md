@@ -74,11 +74,13 @@ The random forest (500 trees, OOB AUC=0.774, 5-fold CV AUC=0.758) substantially 
 
 ### High-precision selection rule
 
-The decision tree identifies a leaf with **precision=0.889 (24/27 cell lines are strong responders)** covering 32% of all responders:
+Initial decision tree fitting identified a leaf with precision=0.889 using C0_mean, CCND1 CN, and a chr1p segment. The chr1p split was removed after inspection revealed near-zero variance in DepMap (SD=0.013, range 0.97–1.02) — a noise split that also failed to discriminate in TCGA (0–4% pass rate across all indications).
 
-> **C0_mean > −0.16** AND **chr11q/CCND1 segment ≤ 1.14** AND **chr1p/CELA3B segment > 1.00**
+A random forest was then fit on the full variance-filtered feature space (283 features after removing near-constant CN segments and rare mutations), and the decision tree was refit restricted to the top-10 RF importance features. This **RF-guided tree** has better cross-validated generalization (CV AUC 0.739 vs 0.658 for the unguided tree) and its best leaf retains the same precision=0.889 (24/27 cell lines) with a four-criterion rule:
 
-This rule selects cells with an active C0 transcriptional program that do not carry CCND1 amplification and have intact chr1p copy number.
+> **C0_mean > −0.16** AND **CCND1 log2CN ≤ 1.14** AND **ERBB2 log2CN ≤ 1.14** AND **C1_sd ≤ 0.76**
+
+All four community mean features (C0_mean, C2_mean, C1_mean, C0_sd) ranked above all CN and mutation features in RF importance — expression community summaries carry 4–6× more importance than the next individual feature (ERBB2/chr17q CN). The rule selects cells with an active C0 transcriptional program, no CCND1 or HER2 amplification, and low C1 heterogeneity (uniformly suppressed mesenchymal program).
 
 ### C0 community: oxidative metabolism and epithelial identity
 
@@ -92,19 +94,44 @@ The 24 confirmed responders span: esophagogastric adenocarcinoma (6), ovarian ep
 
 This does not mean the rule is better than the approved biomarker for breast cancer — it means the two selection strategies are identifying different patient populations. The C0-high, CCND1-unamplified rule describes a precision stratum currently outside any approved indication, with a mechanistic basis (oxidative metabolism + epithelial identity + no cyclin D1 bypass) that is distinct from the PIK3CA/AKT1/PTEN genomic activation framework underlying capivasertib's approval.
 
+### TCGA cohort projection
+
+The RF-guided rule was applied to 20 TCGA PanCancer Atlas 2018 cohorts (n=7,262 tumors total) via cBioPortal API, using per-indication RNA-seq Z-scores for community members and log2CNA for CCND1 and ERBB2. Missing data were treated as passing (neutral). SEER 2022 annual US incidence was used to convert pass rates to absolute patient estimates.
+
+**C1_sd ≤ 0.76 is the most selective criterion**, passing 6–63% by indication versus 60–81% for C0_mean, 66–100% for CCND1, and 86–100% for ERBB2. This criterion (low mesenchymal program heterogeneity) is doing most of the work in narrowing the eligible population.
+
+**Top eligible indications by percentage:**
+
+| Indication | % Eligible | Est. US patients/yr |
+|---|---|---|
+| Pancreas | 47.5% | 31,500 |
+| Colorectal | 44.3% | 67,700 |
+| Stomach | 38.3% | 10,300 |
+| Prostate | 36.1% | 104,100 |
+| Kidney (ccRCC) | 31.4% | 25,700 |
+| Bladder | 32.2% | 26,800 |
+
+**Low eligibility:** Sarcoma (5.5%) and AML (5.8%) — consistent with the high C1 heterogeneity in mesenchymal and hematopoietic tumors respectively.
+
+**Total estimated eligible across 20 indications: ~452,000 patients/year (US)**
+
+The GI enrichment (colorectal 44%, pancreas 48%, stomach 38%) is consistent with the C0 program biology — TFF1, FOXA3, and PITX1 are core C0 members with strong GI epithelial expression — and confirms that the rule is identifying a biologically coherent subset rather than a statistical artifact. The large addressable volumes in colorectal and prostate cancer, combined with the 89% precision from cell line data, position these as priority indications for a prospective biomarker validation study.
+
 ### Clinical translation
 
 Applied to the cell line panel: the rule selects 27/265 lines (10.2%), of which 24 are strong responders — a precision of 89% and a number needed to treat of 1.125. The rule captures 24/75 (32%) of all strong responders. False positive assignment among non-responders is 3/190 (1.6%).
 
 Several caveats govern translation to patients:
 
-**Panel composition bias.** The 10.2% prevalence is derived from a cell line panel that overrepresents GI tumors relative to real-world incidence. Esophagogastric and biliary cancers are common in the selected leaf but are rare cancers in the population. The precision estimate (89%) is more portable across datasets than the prevalence estimate, which will shift substantially in a population-weighted setting.
+**Panel composition bias.** The 10.2% prevalence is derived from a cell line panel that overrepresents GI tumors relative to real-world incidence. The precision estimate (89%) is more portable across datasets than the prevalence estimate.
 
-**Functional-to-pharmacological translation.** Chronos scores measure genetic dependency under complete gene knockout, not drug response. The assumption that functional genetic dependency predicts pharmacological sensitivity to capivasertib or other AKT inhibitors is well-supported by concordance between CRISPR screens and drug response data broadly, but is not guaranteed for this specific rule.
+**TCGA pass rates are upper bounds.** Missing expression or CN data in TCGA is imputed as passing — true pass rates may be lower if missing data is non-random (e.g., missing CN in low-purity samples that also have genomic amplification).
 
-**Model scale and validation requirement.** With n=265 and 380 features, the tree is constrained at depth=4 with min_samples_leaf=15 to limit overfitting. CV AUC (0.758) is lower than OOB AUC (0.774), indicating some residual optimism. The specific numeric thresholds in the rule should be treated as approximate — they require validation in an independent cohort (e.g., patient tumor RNA-seq paired with drug response or survival data) before clinical use.
+**Functional-to-pharmacological translation.** Chronos scores measure genetic dependency under complete gene knockout, not drug response. The assumption that functional genetic dependency predicts pharmacological sensitivity to capivasertib or other AKT inhibitors is well-supported broadly but unvalidated for this specific rule.
 
-**The three false positives are informative.** SW837 (colorectal, chronos=−0.63), SNU-869 (ampullary, −0.33), and CCLF_UPGI_0025_T (esophagogastric, −0.14) satisfy all three criteria but are not strong responders. They likely harbor additional escape mechanisms outside the current feature space. Characterizing what distinguishes them from true responders within the same rule stratum is the most direct path to refining precision further.
+**Model scale and validation requirement.** With n=265 and 283 features after filtering, the tree is constrained at depth=4 with min_samples_leaf=15. The RF-guided tree has CV AUC=0.739 and OOB AUC=0.799 — some residual optimism is expected. Numeric thresholds require validation in an independent cohort (patient tumor RNA-seq + drug response or survival).
+
+**The three false positives are informative.** SW837 (colorectal, chronos=−0.63), SNU-869 (ampullary, −0.33), and CCLF_UPGI_0025_T (esophagogastric, −0.14) satisfy all four criteria but are not strong responders. They likely harbor additional escape mechanisms outside the current feature set.
 
 ## Competitive differentiation
 

@@ -1,0 +1,14 @@
+{
+  "name": "RF_guided_4criterion",
+  "description": "Top-10 RF feature tree best precision leaf: active C0 program, no CCND1 amp, no HER2/chr17q amp, low C1 heterogeneity. Derived from RF-guided decision tree (depth 4, min_leaf 15, top-10 RF features).",
+  "conditions": [
+    {"type": "community_stat", "community": 0, "stat": "mean",
+     "operator": ">", "threshold": -0.16},
+    {"type": "cn_gene", "gene": "CCND1",
+     "operator": "<=", "threshold": 1.14},
+    {"type": "cn_gene", "gene": "ERBB2",
+     "operator": "<=", "threshold": 1.14},
+    {"type": "community_stat", "community": 1, "stat": "sd",
+     "operator": "<=", "threshold": 0.76}
+  ]
+}

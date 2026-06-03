@@ -681,3 +681,70 @@ Prerequisites: chronos_filtered.feather, xp_filtered.feather, cn_segments.feathe
 4. **Chronos ≤ -0.7 threshold is functional, not clinical.** Cell line CRISPR chronos scores do not map directly to clinical response to capivasertib or other AKT inhibitors. The threshold defines a strong functional dependency in the genetic perturbation context. Translation to drug response requires the assumption that functional genetic dependency predicts pharmacological sensitivity — well-supported but not guaranteed.
 
 5. **The 3 false positives are not random.** SW837 (colorectal, -0.63), SNU-869 (ampullary, -0.33), and CCLF_UPGI_0025_T (esophagogastric, -0.14) all fall in the GI cluster and satisfy the C0/CN criteria, but are not strong responders. They may represent tumors with additional escape mechanisms not captured by the current feature set (e.g., downstream pathway bypass, alternative survival signaling). Characterizing what makes them escape despite satisfying the rule would sharpen the biomarker further.
+
+---
+
+## RF-guided 4-criterion rule: TCGA cohort projection
+
+**Rule applied:** `output/AKT1_AKT2_multiomics/tcga_cohort/rule_rf_guided.json`
+
+```json
+{
+  "name": "RF_guided_4criterion",
+  "conditions": [
+    {"type": "community_stat", "community": 0, "stat": "mean", "operator": ">", "threshold": -0.16},
+    {"type": "cn_gene", "gene": "CCND1", "operator": "<=", "threshold": 1.14},
+    {"type": "cn_gene", "gene": "ERBB2", "operator": "<=", "threshold": 1.14},
+    {"type": "community_stat", "community": 1, "stat": "sd", "operator": "<=", "threshold": 0.76}
+  ]
+}
+```
+
+**Script:** `akt_tcga_cohort.py --rule output/.../rule_rf_guided.json`  
+**Output:** `output/AKT1_AKT2_multiomics/tcga_cohort/rf_guided/`
+
+### Per-condition pass rates by indication
+
+C1_sd ≤ 0.76 is the dominant selective criterion (6–63% pass rate vs 60–81% for C0_mean, 66–100% for CCND1, 86–100% for ERBB2). This confirms the C1 mesenchymal heterogeneity filter is driving most of the population narrowing.
+
+### Full TCGA results
+
+| Indication | n | % Eligible | C0_mean | CCND1 | ERBB2 | C1_sd | Est. pts/yr |
+|---|---|---|---|---|---|---|---|
+| Pancreas | 177 | 47.5% | 68.9% | 99.4% | 96.6% | 62.7% | 31,531 |
+| Colorectal | 592 | 44.3% | 78.4% | 99.7% | 96.6% | 54.9% | 67,722 |
+| Stomach | 412 | 38.3% | 72.8% | 94.7% | 86.9% | 61.2% | 10,312 |
+| Prostate | 493 | 36.1% | 80.3% | 99.0% | 99.8% | 38.7% | 104,092 |
+| Bladder | 407 | 32.2% | 75.2% | 89.4% | 95.1% | 44.5% | 26,776 |
+| Kidney (ccRCC) | 510 | 31.4% | 76.7% | 100.0% | 100.0% | 34.1% | 25,663 |
+| Thyroid | 498 | 28.1% | 79.7% | 100.0% | 100.0% | 30.1% | 12,375 |
+| Lung (adeno) | 510 | 25.7% | 70.8% | 98.0% | 98.2% | 33.3% | 33,392 |
+| Biliary | 36 | 22.2% | 72.2% | 88.9% | 100.0% | 30.6% | 1,778 |
+| Breast | 1082 | 22.6% | 80.8% | 82.9% | 88.4% | 36.0% | 70,070 |
+| Lung (squamous) | 484 | 22.9% | 71.3% | 86.2% | 97.1% | 31.4% | 13,760 |
+| Uterus | 527 | 19.4% | 78.0% | 98.7% | 94.3% | 22.0% | 12,813 |
+| Cervical | 294 | 19.4% | 72.4% | 98.0% | 94.9% | 22.4% | 2,679 |
+| Esophageal | 181 | 18.2% | 70.7% | 65.7% | 86.2% | 43.6% | 3,931 |
+| Liver | 366 | 18.6% | 70.8% | 94.0% | 99.2% | 21.9% | 7,735 |
+| Head/Neck | 515 | 17.9% | 69.9% | 76.9% | 97.9% | 32.4% | 11,874 |
+| Ovarian | 300 | 16.3% | 79.3% | 94.0% | 97.0% | 21.7% | 3,219 |
+| Skin (melanoma) | 443 | 10.2% | 60.7% | 95.0% | 99.5% | 12.4% | 10,136 |
+| AML | 173 | 5.8% | 63.0% | 98.3% | 100.0% | 6.4% | 1,202 |
+| Sarcoma | 253 | 5.5% | 60.5% | 97.6% | 99.6% | 5.5% | 752 |
+
+**Total estimated eligible: ~452,000 patients/year (US SEER 2022 basis)**
+
+### Interpretation
+
+- **GI enrichment confirmed in patient population**: colorectal 44%, pancreas 48%, stomach 38% — consistent with C0 program biology (TFF1, FOXA3, PITX1 are GI epithelial markers)
+- **Prostate large absolute volume** (104k/yr) despite 36% pass rate due to high incidence (288k/yr SEER)
+- **Breast lower than expected** (22.6%) — ERBB2 exclusion removes ~12% of breast tumors (HER2+); C1_sd removes another 64%, likely reflecting EMT heterogeneity in breast cancer subtypes
+- **AML and sarcoma near-zero** (5–6%): mesenchymal/hematopoietic programs have high C1 heterogeneity by definition
+- **Melanoma low** (10.2%): low C0_mean (60.7% pass) reflecting lack of epithelial differentiation; consistent with BRAF-driven plasticity
+
+### Caveats
+
+1. **Missing data imputed as passing**: TCGA pass rates are upper bounds. If missing CN or expression correlates with the feature being abnormal (e.g., missing CN in low-purity samples with amplification), true pass rates would be lower.
+2. **C1_sd threshold portability**: The 0.76 threshold was learned from 265 cell lines. In patient tumors with more stromal contamination, C1_sd may be inflated artifactually (stroma is mesenchymal). This could systematically reduce pass rates in bulk tumor RNA-seq relative to what was observed in cell lines.
+3. **TCGA is biased toward resectable tumors**: Pancreatic TCGA (n=177) skews toward resected patients who are healthier and earlier-stage than the metastatic patients targeted by AKT inhibitors. The 47.5% pass rate may not apply to metastatic pancreatic cancer.
+4. **Rule specified by gene CN, applied to continuous log2CNA**: The CCND1 and ERBB2 thresholds (≤1.14 log2) correspond to roughly 2 copies — normal diploid. Any amplification fails. This is a conservative exclusion; a threshold at ≥3 copies (log2≥1.58) would enrich rather than exclude.
